@@ -5,11 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.http_client import http_client_manager
+from app.db import init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manages startup and shutdown of shared async HTTPX client."""
+    """Manages startup and shutdown of shared async HTTPX client and database tables."""
+    init_db()
     await http_client_manager.start()
     yield
     await http_client_manager.stop()

@@ -5,6 +5,7 @@ from fastapi import HTTPException, UploadFile
 from app.agents.resume.graph import resume_processing_graph
 from app.core.model_resolver import GroqModelResolver
 from app.schemas.resume import ResumeProcessResponse
+from app.services.conversation_service import conversation_service
 from app.utils.file_parser import extract_text_from_upload
 
 
@@ -56,7 +57,7 @@ class ResumeService:
                 detail=f"Multi-agent resume processing failed: {str(exc)}",
             ) from exc
 
-        return ResumeProcessResponse(
+        response = ResumeProcessResponse(
             filename=filename,
             target_role=target_role,
             extracted_profile=final_state["extracted_profile"],
@@ -66,6 +67,19 @@ class ResumeService:
             agent_trace=final_state.get("agent_trace", []),
             raw_text_preview=raw_text[:500] + ("..." if len(raw_text) > 500 else ""),
         )
+
+        try:
+            conversation_service.record_resume_analysis(
+                filename=filename,
+                target_role=target_role,
+                job_description=job_description,
+                raw_text=raw_text,
+                result=response.model_dump(),
+            )
+        except Exception as log_err:
+            print(f"[Warning] Failed to record resume analysis history: {log_err}")
+
+        return response
 
     @staticmethod
     async def stream_resume_processing(
@@ -237,6 +251,17 @@ class ResumeService:
                 agent_trace=accumulated_state.get("agent_trace", []),
                 raw_text_preview=raw_text[:500] + ("..." if len(raw_text) > 500 else ""),
             )
+
+            try:
+                conversation_service.record_resume_analysis(
+                    filename=filename,
+                    target_role=target_role,
+                    job_description=job_description,
+                    raw_text=raw_text,
+                    result=final_response.model_dump(),
+                )
+            except Exception as log_err:
+                print(f"[Warning] Failed to record resume analysis history: {log_err}")
 
             yield json.dumps(
                 {

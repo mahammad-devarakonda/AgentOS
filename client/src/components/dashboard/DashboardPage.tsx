@@ -23,6 +23,7 @@ import {
   Psychology as BrainIcon,
   CheckCircle as CheckIcon,
   Layers as LayersIcon,
+  HistoryRounded as HistoryIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AgentNetworkVisual } from './AgentNetworkVisual';
@@ -216,6 +217,30 @@ export const DashboardPage: React.FC = () => {
                 }}
               >
                 Launch Job Search Agent
+              </Button>
+
+              <Button
+                variant="outlined"
+                size="large"
+                startIcon={<HistoryIcon />}
+                endIcon={<ArrowForwardIcon />}
+                onClick={() => navigate('/conversations')}
+                sx={{
+                  color: '#4f46e5',
+                  borderColor: 'rgba(99, 102, 241, 0.3)',
+                  bgcolor: '#ffffff',
+                  px: 3.5,
+                  py: 1.4,
+                  borderRadius: 2.5,
+                  fontSize: '1rem',
+                  fontWeight: 700,
+                  '&:hover': {
+                    borderColor: '#4f46e5',
+                    bgcolor: 'rgba(99, 102, 241, 0.06)',
+                  },
+                }}
+              >
+                View Execution History
               </Button>
             </Stack>
 

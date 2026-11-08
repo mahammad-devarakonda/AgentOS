@@ -5,6 +5,7 @@ from fastapi import HTTPException, UploadFile
 from app.agents.job_search.graph import job_search_graph
 from app.core.model_resolver import GroqModelResolver
 from app.schemas.job_search import JobSearchProcessResponse
+from app.services.conversation_service import conversation_service
 from app.utils.file_parser import extract_text_from_upload
 
 
@@ -56,7 +57,7 @@ class JobService:
                 detail=f"Multi-agent job search failed: {str(exc)}",
             ) from exc
 
-        return JobSearchProcessResponse(
+        response = JobSearchProcessResponse(
             filename=filename,
             target_role=target_role,
             preferred_location=preferred_location,
@@ -67,6 +68,19 @@ class JobService:
             agent_trace=final_state.get("agent_trace", []),
             raw_text_preview=raw_text[:500] + ("..." if len(raw_text) > 500 else ""),
         )
+
+        try:
+            conversation_service.record_job_search(
+                filename=filename,
+                target_role=target_role,
+                preferred_location=preferred_location,
+                raw_text=raw_text,
+                result=response.model_dump(),
+            )
+        except Exception as log_err:
+            print(f"[Warning] Failed to record job search history: {log_err}")
+
+        return response
 
     @staticmethod
     async def stream_job_search(
@@ -181,6 +195,17 @@ class JobService:
                 agent_trace=accumulated_state.get("agent_trace", []),
                 raw_text_preview=raw_text[:500] + ("..." if len(raw_text) > 500 else ""),
             )
+
+            try:
+                conversation_service.record_job_search(
+                    filename=filename,
+                    target_role=target_role,
+                    preferred_location=preferred_location,
+                    raw_text=raw_text,
+                    result=final_response.model_dump(),
+                )
+            except Exception as log_err:
+                print(f"[Warning] Failed to record job search history: {log_err}")
 
             yield json.dumps(
                 {

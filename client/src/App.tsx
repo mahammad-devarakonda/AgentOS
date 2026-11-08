@@ -8,6 +8,7 @@ import { Navbar } from './components/common/Navbar';
 import { DashboardPage } from './components/dashboard/DashboardPage';
 import { ResumeAnalyzerPage } from './components/resume-analyzer/ResumeAnalyzerPage';
 import { JobSearchPage } from './components/job-search/JobSearchPage';
+import { ConversationHistoryPage } from './components/conversations/ConversationHistoryPage';
 
 export const App: React.FC = () => {
   return (
@@ -23,6 +24,8 @@ export const App: React.FC = () => {
                 <Route path="/resume-analyzer" element={<ResumeAnalyzerPage />} />
                 <Route path="/resume" element={<Navigate to="/resume-analyzer" replace />} />
                 <Route path="/job-search" element={<JobSearchPage />} />
+                <Route path="/conversations" element={<ConversationHistoryPage />} />
+                <Route path="/history" element={<Navigate to="/conversations" replace />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Box>

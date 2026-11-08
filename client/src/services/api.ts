@@ -1,5 +1,14 @@
 import type { ResumeProcessResponse, StreamStepEvent } from '../types/resume';
 import type { JobSearchProcessResponse, JobStreamStepEvent } from '../types/jobSearch';
+import type {
+  ConversationAnalyticsResponse,
+  ConversationDetail,
+  ConversationItem,
+  ConversationListResponse,
+  CreateConversationPayload,
+  CreateMessagePayload,
+  MessageItem,
+} from '../types/conversation';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -142,3 +151,114 @@ export const jobSearchApi = {
     return consumeNdjsonStream<JobSearchProcessResponse>(response, onEvent);
   },
 };
+
+export const conversationApi = {
+  async listConversations(agentType?: string, limit: number = 50, offset: number = 0): Promise<ConversationListResponse> {
+    const params = new URLSearchParams();
+    if (agentType) params.append('agent_type', agentType);
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+
+    const res = await fetch(`${API_BASE_URL}/conversations?${params.toString()}`);
+    if (!res.ok) {
+      throw new Error(`Failed to list conversations: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async getConversation(id: string): Promise<ConversationDetail> {
+    const res = await fetch(`${API_BASE_URL}/conversations/${id}`);
+    if (!res.ok) {
+      throw new Error(`Failed to get conversation ${id}: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async createConversation(payload: CreateConversationPayload): Promise<ConversationItem> {
+    const res = await fetch(`${API_BASE_URL}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to create conversation: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async updateConversation(id: string, payload: { title?: string; metadata?: Record<string, any> }): Promise<ConversationItem> {
+    const res = await fetch(`${API_BASE_URL}/conversations/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to update conversation: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async deleteConversation(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/conversations/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to delete conversation: ${res.statusText}`);
+    }
+  },
+
+  async clearAllConversations(): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/conversations`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to clear history: ${res.statusText}`);
+    }
+  },
+
+  async addMessage(conversationId: string, payload: CreateMessagePayload): Promise<MessageItem> {
+    const res = await fetch(`${API_BASE_URL}/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to add message: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async getMessages(conversationId: string, limit: number = 100, offset: number = 0): Promise<MessageItem[]> {
+    const params = new URLSearchParams({ limit: limit.toString(), offset: offset.toString() });
+    const res = await fetch(`${API_BASE_URL}/conversations/${conversationId}/messages?${params.toString()}`);
+    if (!res.ok) {
+      throw new Error(`Failed to get messages: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async getAnalytics(agentTypes?: string[], limit: number = 100, offset: number = 0): Promise<ConversationAnalyticsResponse> {
+    const params = new URLSearchParams();
+    if (agentTypes && agentTypes.length > 0) {
+      agentTypes.forEach((t) => params.append('agent_types', t));
+    }
+    params.append('limit', limit.toString());
+    params.append('offset', offset.toString());
+
+    const res = await fetch(`${API_BASE_URL}/conversations/analytics?${params.toString()}`);
+    if (!res.ok) {
+      throw new Error(`Failed to get conversation analytics: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async getResumeAndJobsConversations(limit: number = 100, offset: number = 0): Promise<ConversationAnalyticsResponse> {
+    const params = new URLSearchParams({ limit: limit.toString(), offset: offset.toString() });
+    const res = await fetch(`${API_BASE_URL}/conversations/resume-and-jobs?${params.toString()}`);
+    if (!res.ok) {
+      throw new Error(`Failed to get resume and jobs conversations: ${res.statusText}`);
+    }
+    return res.json();
+  },
+};
+

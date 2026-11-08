@@ -17,6 +17,20 @@ from app.schemas.job_search import (
     MarketQueryParameters,
     OpportunityRankingSummary,
 )
+from app.schemas.conversation import (
+    MessageRole,
+    MessageCreate,
+    MessageResponse,
+    ConversationCreate,
+    ConversationUpdate,
+    ConversationResponse,
+    ConversationDetailResponse,
+    ConversationListResponse,
+    TokenUsage,
+    ConversationAnalyticsItem,
+    AgentTokenStats,
+    ConversationAnalyticsResponse,
+)
 
 __all__ = [
     "ResumeProcessResponse",
@@ -32,4 +46,16 @@ __all__ = [
     "ParsedCandidateProfile",
     "MarketQueryParameters",
     "OpportunityRankingSummary",
+    "MessageRole",
+    "MessageCreate",
+    "MessageResponse",
+    "ConversationCreate",
+    "ConversationUpdate",
+    "ConversationResponse",
+    "ConversationDetailResponse",
+    "ConversationListResponse",
+    "TokenUsage",
+    "ConversationAnalyticsItem",
+    "AgentTokenStats",
+    "ConversationAnalyticsResponse",
 ]

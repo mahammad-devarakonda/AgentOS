@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,14 @@ class Settings(BaseSettings):
         "http://localhost:3000",
     ]
     HTTPX_TIMEOUT_SECONDS: float = 60.0
+    DATABASE_PATH: str = "agentos.db"
+
+    # Qdrant Vector Store & Embedding Configurations
+    QDRANT_STORAGE_PATH: str = "qdrant_storage"
+    QDRANT_URL: Optional[str] = None
+    QDRANT_API_KEY: Optional[str] = None
+    EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
+
 
     model_config = SettingsConfigDict(
         env_file=".env",

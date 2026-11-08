@@ -12,6 +12,8 @@ export interface JobPostingItem {
   missing_skills: string[];
   agent_summary: string;
   application_tip?: string | null;
+  apply_url?: string | null;
+  is_within_24h?: boolean;
 }
 
 export interface ParsedCandidateProfile {

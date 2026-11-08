@@ -19,6 +19,7 @@ import {
   Description as ResumeIcon,
   TravelExplore as JobIcon,
   DashboardRounded as DashboardIcon,
+  HistoryRounded as HistoryIcon,
   Menu as MenuIcon,
   Circle as CircleIcon,
 } from '@mui/icons-material';
@@ -35,6 +36,7 @@ export const Navbar: React.FC = () => {
     { label: 'Dashboard', path: '/', icon: <DashboardIcon fontSize="small" /> },
     { label: 'Resume Analyzer', path: '/resume-analyzer', icon: <ResumeIcon fontSize="small" /> },
     { label: 'Job Search Agent', path: '/job-search', icon: <JobIcon fontSize="small" /> },
+    { label: 'Execution History', path: '/conversations', icon: <HistoryIcon fontSize="small" /> },
   ];
 
   return (

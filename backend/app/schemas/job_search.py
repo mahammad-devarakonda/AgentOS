@@ -35,6 +35,8 @@ class JobPostingItem(BaseModel):
     missing_skills: List[str] = Field(default_factory=list, description="Recommended skills or keywords to emphasize")
     agent_summary: str = Field(default="", description="AI agent evaluation commentary for this opportunity")
     application_tip: Optional[str] = Field(default=None, description="Tailored pitch recommendation for the application")
+    apply_url: Optional[str] = Field(default=None, description="Direct application or job view URL on LinkedIn/RemoteOK")
+    is_within_24h: bool = Field(default=True, description="Whether the position was posted within the past 24 hours")
 
 
 class JobMatchEvaluationList(BaseModel):
