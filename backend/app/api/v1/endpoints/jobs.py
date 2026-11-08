@@ -23,11 +23,14 @@ async def job_search_health():
     return {
         "status": "ok",
         "module": "Job Search Multi-Agent Pipeline",
+        "vector_database": "Qdrant",
+        "embedding_model": settings.EMBEDDING_MODEL_NAME,
+        "rag_enabled": True,
         "pipeline_agents": [
-            "Agent 1: Resume Parser & Profiler",
+            "Agent 1: Resume Parser & Profiler (Qdrant Chunk Indexer)",
             "Agent 2: Market Query Synthesizer",
-            "Agent 3: Multi-Board Discovery Agent",
-            "Agent 4: ATS Fit & Relevance Matcher",
+            "Agent 3: Multi-Board Discovery Agent (Qdrant Dense Vector Search)",
+            "Agent 4: ATS Fit & Relevance Matcher (Qdrant Evidence RAG)",
             "Agent 5: Opportunity Ranking Agent",
         ],
         "active_model": best_model,

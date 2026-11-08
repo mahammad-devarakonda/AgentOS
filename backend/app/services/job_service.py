@@ -1,8 +1,10 @@
 import json
+import uuid
 from typing import AsyncGenerator, Optional
 from fastapi import HTTPException, UploadFile
 
 from app.agents.job_search.graph import job_search_graph
+from app.agents.job_search.nodes import _validate_resume_document
 from app.core.model_resolver import GroqModelResolver
 from app.schemas.job_search import JobSearchProcessResponse
 from app.services.conversation_service import conversation_service
@@ -39,9 +41,17 @@ class JobService:
                 detail="Resume content is too short for job matching. Please provide a full resume.",
             )
 
+        # Pre-flight validation: check for valid resume structure
+        try:
+            _validate_resume_document(raw_text=raw_text, filename=filename)
+        except ValueError as val_err:
+            raise HTTPException(status_code=400, detail=str(val_err)) from val_err
+
+        session_id = f"job_search_{uuid.uuid4().hex[:10]}"
         try:
             final_state = await job_search_graph.ainvoke(
                 {
+                    "session_id": session_id,
                     "filename": filename,
                     "raw_text": raw_text,
                     "target_role": target_role.strip() if target_role else None,
@@ -99,6 +109,18 @@ class JobService:
             ) + "\n"
             return
 
+        # Pre-flight validation: check for valid resume structure
+        try:
+            _validate_resume_document(raw_text=raw_text, filename=filename)
+        except ValueError as val_err:
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "message": str(val_err),
+                }
+            ) + "\n"
+            return
+
         try:
             selected_model = await GroqModelResolver.get_best_model()
         except Exception:
@@ -117,7 +139,9 @@ class JobService:
             }
         ) + "\n"
 
+        session_id = f"job_search_{uuid.uuid4().hex[:10]}"
         initial_state = {
+            "session_id": session_id,
             "filename": filename,
             "raw_text": raw_text,
             "target_role": target_role.strip() if target_role else None,
@@ -142,13 +166,13 @@ class JobService:
                 "discovery",
                 "Agent 3: Multi-Board Discovery Agent",
                 65,
-                "Scanned tech boards and discovered live matching postings",
+                "Scanned tech boards and queried Qdrant vector store (all-MiniLM-L6-v2)",
             ),
             "ats_matcher_agent": (
                 "matcher",
                 "Agent 4: ATS Fit & Relevance Matcher",
                 85,
-                "Calculated candidate compatibility and skill overlap scores",
+                "RAG-evaluated candidate compatibility using Qdrant vector retrieval",
             ),
             "opportunity_ranking_agent": (
                 "ranking",

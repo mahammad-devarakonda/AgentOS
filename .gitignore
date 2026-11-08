@@ -16,6 +16,10 @@ env/
 *.db
 *.sqlite3
 
+# Vector Store & Embedding Caches
+qdrant_storage/
+fastembed_cache/
+
 # Env files
 .env
 .env.*

@@ -49,8 +49,8 @@ const INITIAL_AGENT_STEPS: JobAgentStep[] = [
   {
     id: 'parser',
     name: 'Agent 1: Resume Parser & Profiler',
-    role: 'Candidate Profiling',
-    description: 'Extracting key technical skills, experience timeline, seniority level, and domain expertise from uploaded resume.',
+    role: 'Candidate Profiling & Chunk Indexing',
+    description: 'Extracting key technical skills, experience timeline, and indexing resume chunks into Qdrant vector store.',
     status: 'pending',
   },
   {
@@ -63,15 +63,15 @@ const INITIAL_AGENT_STEPS: JobAgentStep[] = [
   {
     id: 'discovery',
     name: 'Agent 3: Multi-Board Discovery Agent',
-    role: 'Live Job Board Scanning',
-    description: 'Scanning LinkedIn, Indeed, and partner developer boards for open vacancies matching candidate profile.',
+    role: 'Qdrant Vector Retrieval & Live Scanning',
+    description: 'Querying Qdrant vector store via dense semantic search (all-MiniLM-L6-v2) and scanning live tech boards.',
     status: 'pending',
   },
   {
     id: 'matcher',
     name: 'Agent 4: ATS Fit & Relevance Matcher',
-    role: 'Semantic Skill Scoring',
-    description: 'Evaluating candidate-to-job compatibility, identifying skill overlaps, and computing relevance match scores.',
+    role: 'RAG Semantic Evidence Scoring',
+    description: 'Evaluating candidate-to-job compatibility using Qdrant vector RAG evidence retrieval and computing match scores.',
     status: 'pending',
   },
   {
@@ -201,61 +201,7 @@ export const JobSearchPage: React.FC = () => {
       setProgressPercent(Math.round(((i + 1) / stepOrder.length) * 100));
     }
 
-    const fresh24hJobs: JobPostingItem[] = [
-      {
-        id: 'job-fresh-1',
-        title: 'Senior AI & Backend Systems Engineer',
-        company: 'NeuralFlow Technologies',
-        location: preferredLocation || 'Remote (Worldwide)',
-        salary: '$165,000 - $210,000 / yr',
-        type: 'Full-time',
-        posted: '3 hours ago (Past 24h)',
-        description: 'Architect and deploy multi-agent LLM systems, RAG pipelines, and high-throughput Python backends using LangGraph and FastAPI.',
-        match_score: 96,
-        matched_skills: ['Python', 'FastAPI', 'LangGraph', 'Docker', 'REST APIs', 'LLMs'],
-        missing_skills: ['Kubernetes cluster ops', 'Triton Inference Server'],
-        agent_summary: 'Fresh opening posted 3 hours ago with high compatibility on multi-agent architectures and FastAPI.',
-        application_tip: 'Highlight your asynchronous FastAPI throughput benchmarks in the cover letter.',
-        apply_url: 'https://www.linkedin.com/jobs',
-        is_within_24h: true,
-      },
-      {
-        id: 'job-fresh-2',
-        title: 'Full-Stack Agentic AI Platform Developer',
-        company: 'Synthetix Systems',
-        location: 'Remote (US / Global)',
-        salary: '$145,000 - $190,000 / yr',
-        type: 'Full-time',
-        posted: '7 hours ago (Past 24h)',
-        description: 'Build responsive React + TypeScript dashboards that interface with asynchronous agent pipelines and real-time streaming state.',
-        match_score: 92,
-        matched_skills: ['React', 'TypeScript', 'Redux Toolkit', 'Material-UI', 'FastAPI'],
-        missing_skills: ['WebSockets SSE streaming', 'TailwindCSS'],
-        agent_summary: 'Verified live posting from 7 hours ago. High match for front-end architecture and streaming UI state.',
-        application_tip: 'Emphasize your React state management and streaming UI components.',
-        apply_url: 'https://remoteok.com',
-        is_within_24h: true,
-      },
-      {
-        id: 'job-fresh-3',
-        title: 'Autonomous Systems Backend Engineer',
-        company: 'CognitiveCore AI',
-        location: 'Austin, TX (Remote)',
-        salary: '$150,000 - $195,000 / yr',
-        type: 'Full-time',
-        posted: '14 hours ago (Past 24h)',
-        description: 'Design reliable asynchronous task queues, validation guards, and model fallbacks for multi-step AI agent workflows.',
-        match_score: 89,
-        matched_skills: ['Python', 'Pydantic v2', 'Asyncio', 'Groq API', 'Unit Testing'],
-        missing_skills: ['Celery / Redis Queues', 'PostgreSQL pgvector'],
-        agent_summary: 'Live vacancy posted 14 hours ago with strong fit for backend resilience and schema validation.',
-        application_tip: 'Showcase your schema validation patterns and multi-model fallback handling.',
-        apply_url: 'https://www.linkedin.com/jobs',
-        is_within_24h: true,
-      },
-    ];
 
-    setDiscoveredJobs(fresh24hJobs);
     setIsSearching(false);
     setSearchCompleted(true);
     setActiveAgentId(null);

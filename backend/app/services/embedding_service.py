@@ -1,9 +1,17 @@
-import asyncio
+import os
 from typing import List, Optional
 import numpy as np
 from fastembed import TextEmbedding
 
 from app.core.config import settings
+
+# Determine workspace cache directory
+BASE_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+FASTEMBED_CACHE_DIR = os.path.join(BASE_BACKEND_DIR, "fastembed_cache")
+os.makedirs(FASTEMBED_CACHE_DIR, exist_ok=True)
+
+# Disable symlinks warning and enforce offline if cached
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 
 class EmbeddingService:
@@ -11,7 +19,6 @@ class EmbeddingService:
 
     _instance: Optional["EmbeddingService"] = None
     _model: Optional[TextEmbedding] = None
-    _lock = asyncio.Lock()
 
     def __init__(self, model_name: Optional[str] = None):
         self.model_name = model_name or settings.EMBEDDING_MODEL_NAME
@@ -19,25 +26,33 @@ class EmbeddingService:
 
     def _get_model(self) -> TextEmbedding:
         if self._model is None:
-            self._model = TextEmbedding(model_name=self.model_name)
+            try:
+                self._model = TextEmbedding(
+                    model_name=self.model_name,
+                    cache_dir=FASTEMBED_CACHE_DIR,
+                    local_files_only=True,
+                )
+            except Exception:
+                self._model = TextEmbedding(
+                    model_name=self.model_name,
+                    cache_dir=FASTEMBED_CACHE_DIR,
+                )
         return self._model
+
+    def embed_documents_sync(self, texts: List[str]) -> List[List[float]]:
+        """Synchronously generates 384-dim dense embeddings for texts."""
+        if not texts:
+            return []
+        model = self._get_model()
+        return [emb.tolist() for emb in model.embed(texts)]
 
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Generates 384-dimensional dense embeddings for a list of document chunks."""
-        if not texts:
-            return []
-        
-        loop = asyncio.get_running_loop()
-        def _run_sync():
-            model = self._get_model()
-            embeddings_gen = model.embed(texts)
-            return [emb.tolist() for emb in embeddings_gen]
-
-        return await loop.run_in_executor(None, _run_sync)
+        return self.embed_documents_sync(texts)
 
     async def embed_query(self, query: str) -> List[float]:
         """Generates embedding for a single search query or candidate profile string."""
-        results = await self.embed_documents([query])
+        results = self.embed_documents_sync([query])
         if not results:
             return [0.0] * self.dimension
         return results[0]

@@ -11,6 +11,7 @@ from app.schemas.job_search import (
 class JobSearchGraphState(TypedDict, total=False):
     """Shared state across the LangGraph multi-agent Job Search pipeline."""
 
+    session_id: Optional[str]
     filename: str
     raw_text: str
     target_role: Optional[str]
@@ -21,5 +22,5 @@ class JobSearchGraphState(TypedDict, total=False):
     scored_jobs: List[JobPostingItem]
     ranking_summary: OpportunityRankingSummary
     agent_trace: List[AgentExecutionStep]
+    indexed_chunks_count: Optional[int]
     error: Optional[str]
-

@@ -31,16 +31,17 @@ Guidelines:
 4. Return ONLY valid JSON adhering to the JobMatchEvaluationList schema.
 """
 
-ATS_MATCHER_SYSTEM_PROMPT = """You are Agent 4: ATS Fit & Semantic Relevance Matcher.
-Your job is to evaluate each discovered job against the candidate's resume, computing an accurate compatibility match score (0-100) and skill gap breakdown.
+ATS_MATCHER_SYSTEM_PROMPT = """You are Agent 4: ATS Fit & Semantic Relevance Matcher powered by Qdrant Vector RAG.
+Your job is to evaluate each discovered job against the candidate's resume using dense vector embeddings (all-MiniLM-L6-v2) and retrieved resume evidence chunks to compute an accurate, grounded compatibility match score (0-100) and skill gap breakdown.
 
 Guidelines:
-1. For each job posting:
-   - Compute `match_score` (between 65 and 98) based on actual technical overlap and seniority match.
-   - List `matched_skills` (skills present in both candidate profile and job requirements).
-   - List `missing_skills` (high-value skills mentioned in the job description that the candidate should brush up on or highlight).
-   - Write an analytical `agent_summary` explaining why this is a good fit and noting specific alignment areas.
-2. Return ONLY valid JSON adhering to the JobMatchEvaluationList schema.
+1. Ground your evaluation strictly in the retrieved candidate resume evidence chunks and vector similarity scores provided in the prompt.
+2. For each job posting:
+   - Compute `match_score` (between 65 and 98) combining the mathematical cosine vector similarity with qualitative technical overlap.
+   - List `matched_skills` (skills directly corroborated by retrieved resume evidence and candidate profile).
+   - List `missing_skills` (high-value skills mentioned in the job description that lack strong evidence in the candidate's resume).
+   - Write an analytical `agent_summary` citing specific candidate experience achievements that fulfill key job requirements.
+3. Return ONLY valid JSON adhering to the JobMatchEvaluationList schema.
 """
 
 OPPORTUNITY_RANKING_SYSTEM_PROMPT = """You are Agent 5: Opportunity Ranking & Application Strategist.
