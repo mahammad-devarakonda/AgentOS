@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import re
 from typing import Tuple, Type, TypeVar
@@ -22,6 +23,7 @@ from app.agents.resume.prompts import (
     EXTRACTOR_SYSTEM_PROMPT,
     VERIFIER_SYSTEM_PROMPT,
 )
+from app.services.job_vector_store import job_vector_store
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -143,15 +145,28 @@ def _extract_json_str(text: str) -> str:
 # ==============================================================================
 
 async def extractor_agent_node(state: ResumeGraphState) -> ResumeGraphState:
-    """Node 1: Parses raw resume text into a structured ExtractedResumeProfile."""
+    """Node 1: Parses raw resume text into a structured ExtractedResumeProfile and indexes chunks for RAG."""
     # [Step 1: Retrieve input data from graph state]
     raw_text = state.get("raw_text", "")
+    filename = state.get("filename", "uploaded_resume")
+    session_id = state.get("session_id") or filename
     trace = list(state.get("agent_trace", []))
 
-    # [Step 2: Construct the extraction prompt with raw resume content]
+    # [Step 1b: Semantic Chunking & Qdrant Vector Indexing]
+    chunk_count = 0
+    try:
+        chunk_count = job_vector_store.index_resume(session_id=session_id, raw_text=raw_text)
+    except Exception as idx_err:
+        print(f"[Warning] Resume vector indexing warning: {idx_err}")
+
+    current_date_str = datetime.now().strftime("%B %Y")
+
+    # [Step 2: Construct the extraction prompt with raw resume content and current date reference]
     user_prompt = (
+        f"Current Real-World Date: {current_date_str}\n\n"
         "Extract the structured candidate profile from the following raw resume text:\n\n"
-        f"--- RESUME TEXT START ---\n{raw_text}\n--- RESUME TEXT END ---"
+        f"--- RESUME TEXT START ---\n{raw_text}\n--- RESUME TEXT END ---\n\n"
+        f"Note: Calculate total_years_experience accurately relative to {current_date_str}."
     )
 
     # [Step 3: Invoke Groq LLM with EXTRACTOR_SYSTEM_PROMPT and schema validation]
@@ -175,13 +190,15 @@ async def extractor_agent_node(state: ResumeGraphState) -> ResumeGraphState:
             summary=(
                 f"Extracted profile for '{profile.contact.full_name}' with "
                 f"{total_skills} skills, {len(profile.work_experience)} roles, and "
-                f"{len(profile.education)} education entries."
+                f"indexed {chunk_count} semantic chunks into Qdrant (all-MiniLM-L6-v2) for RAG."
             ),
         )
     )
 
     # [Step 5: Return updated state slice to LangGraph]
     return {
+        "session_id": session_id,
+        "indexed_chunks_count": chunk_count,
         "extracted_profile": profile,
         "agent_trace": trace,
     }
@@ -220,12 +237,49 @@ async def analyzer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     )
     trace = list(state.get("agent_trace", []))
 
-    # [Step 2: Construct evaluation prompt combining profile and target role/JD]
+    # [Step 1b: Retrieve grounded semantic evidence chunks from Qdrant if JD is provided]
+    session_id = state.get("session_id") or state.get("filename", "uploaded_resume")
+    vector_sim_scores = []
+    semantic_evidence_lines = []
+
+    if state.get("job_description"):
+        jd_lines = [l.strip() for l in job_description.split("\n") if len(l.strip()) > 25]
+        for req in jd_lines[:5]:
+            try:
+                hits = job_vector_store.retrieve_resume_evidence(
+                    session_id=session_id,
+                    job_requirement_query=req,
+                    limit=2,
+                )
+                if hits:
+                    vector_sim_scores.extend([s for _, s in hits])
+                    snippets = [t[:140] for t, _ in hits]
+                    semantic_evidence_lines.append(f"- Requirement: '{req}' -> Matched Resume Chunks: {snippets}")
+            except Exception:
+                pass
+
+    evidence_str = ""
+    if semantic_evidence_lines:
+        evidence_str = (
+            "\n\nRetrieved Semantic Resume Evidence from Vector DB:\n"
+            + "\n".join(semantic_evidence_lines)
+            + "\nUse this vector evidence to accurately evaluate the candidate's alignment with specific job requirements."
+        )
+
+    current_date_str = datetime.now().strftime("%B %Y")
+
+    # [Step 2: Construct evaluation prompt combining profile, target role/JD, and vector evidence]
     user_prompt = (
+        f"Current Real-World Date: {current_date_str}\n"
         f"Target Role: {target_role}\n"
         f"Job Description:\n{job_description}\n\n"
-        f"Extracted Candidate Profile JSON:\n{profile.model_dump_json(indent=2)}\n\n"
-        "Perform a comprehensive ATS, impact, and skill-gap analysis."
+        f"Extracted Candidate Profile JSON:\n{profile.model_dump_json(indent=2)}"
+        f"{evidence_str}\n\n"
+        f"Perform a comprehensive ATS, impact, and skill-gap analysis.\n"
+        f"IMPORTANT DATE RULE: The current real-world date is {current_date_str}. "
+        f"All work experience, projects, or education dates on or before {current_date_str} "
+        f"(e.g., 2025, 2026 up to {current_date_str}) are completely valid past or present dates. "
+        f"Do NOT flag dates on or before {current_date_str} as future dates or credibility concerns."
     )
 
     # [Step 3: Invoke Groq LLM with ANALYZER_SYSTEM_PROMPT and schema validation]
@@ -237,6 +291,8 @@ async def analyzer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     )
 
     # [Step 4: Record execution step with computed overall and section scores]
+    avg_sim = round(sum(vector_sim_scores) / len(vector_sim_scores), 3) if vector_sim_scores else None
+    vector_info = f", Vector Semantic Similarity: {int(avg_sim * 100)}%" if avg_sim else ""
     trace.append(
         AgentExecutionStep(
             agent_name=f"Agent 2: ATS & Quality Scorer ({used_model})",
@@ -244,7 +300,7 @@ async def analyzer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
             summary=(
                 f"Calculated Overall Score: {analysis.overall_score}/100 "
                 f"(ATS: {analysis.section_scores.ats_compatibility}/100, "
-                f"Impact: {analysis.section_scores.impact_and_metrics}/100)."
+                f"Impact: {analysis.section_scores.impact_and_metrics}/100{vector_info})."
             ),
         )
     )
@@ -252,6 +308,7 @@ async def analyzer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     # [Step 5: Return updated analysis to LangGraph state]
     return {
         "analysis": analysis,
+        "vector_similarity_score": avg_sim,
         "agent_trace": trace,
     }
 
@@ -363,14 +420,18 @@ async def verifier_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     job_description = state.get("job_description") or "Not specified"
     trace = list(state.get("agent_trace", []))
 
+    current_date_str = datetime.now().strftime("%B %Y")
+
     # [Step 2: Construct verification prompt feeding all prior agent outputs]
     user_prompt = (
+        f"Current Real-World Date: {current_date_str}\n"
         f"Target Role: {target_role}\n"
         f"Job Description:\n{job_description}\n\n"
         f"Agent 1 Output (Extracted Profile):\n{profile.model_dump_json(indent=2)}\n\n"
         f"Agent 2 Output (ATS Evaluation - Overall Score {analysis.overall_score}/100):\n{analysis.model_dump_json(indent=2)}\n\n"
         f"Agent 3 Output (Enhancements & Bullet Rewrites):\n{enhancements.model_dump_json(indent=2)}\n\n"
-        "Since the overall score is below 90, audit all work from Agents 1, 2, and 3, verify accuracy, "
+        f"Since the overall score is below 90, audit all work from Agents 1, 2, and 3, verify accuracy "
+        f"(evaluating timeline validity against {current_date_str}), "
         "and provide critical fixes and an upgraded summary to reach a 90+ score."
     )
 

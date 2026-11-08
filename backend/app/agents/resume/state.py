@@ -11,10 +11,13 @@ from app.schemas.resume import (
 class ResumeGraphState(TypedDict, total=False):
     """Shared state across the LangGraph multi-agent resume processing pipeline."""
 
+    session_id: Optional[str]
     filename: str
     raw_text: str
     target_role: Optional[str]
     job_description: Optional[str]
+    indexed_chunks_count: Optional[int]
+    vector_similarity_score: Optional[float]
     extracted_profile: ExtractedResumeProfile
     analysis: ResumeAnalysisEvaluation
     enhancements: ResumeEnhancementOutput

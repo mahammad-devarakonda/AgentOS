@@ -1,7 +1,7 @@
-import re
 import time
 import uuid
 from typing import Dict, List, Optional, Tuple
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -20,6 +20,14 @@ from app.services.embedding_service import embedding_service
 JOB_COLLECTION_NAME = "job_postings"
 RESUME_COLLECTION_NAME = "resume_chunks"
 VECTOR_DIMENSION = 384
+
+# Specialized text splitter for resume chunking aligned with all-MiniLM-L6-v2 token limits
+resume_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=500,
+    chunk_overlap=60,
+    separators=["\n\n", "\n", ". ", " ", ""],
+    length_function=len,
+)
 
 
 class JobVectorStore:
@@ -159,10 +167,12 @@ class JobVectorStore:
         client = get_qdrant_client()
         self._ensure_collections(client)
 
-        # Split resume text into coherent paragraphs / sections
-        raw_chunks = [c.strip() for c in re.split(r"\n\s*\n+", raw_text) if len(c.strip()) > 30]
+        # Split resume text into coherent chunks with overlap using RecursiveCharacterTextSplitter
+        raw_chunks = [c.strip() for c in resume_splitter.split_text(raw_text) if len(c.strip()) > 20]
         if not raw_chunks:
-            raw_chunks = [raw_text[:500]]
+            raw_chunks = [raw_text[:500]] if raw_text.strip() else []
+        if not raw_chunks:
+            return 0
 
         embeddings = embedding_service.embed_documents_sync(raw_chunks)
         points = []

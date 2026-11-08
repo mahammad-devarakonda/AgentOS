@@ -203,7 +203,7 @@ export const ConversationHistoryPage: React.FC = () => {
             </Typography>
           </Box>
 
-          <Stack direction="row" spacing={1.5}>
+          <Stack direction="row" spacing={1}>
             <Button
               variant="outlined"
               color="error"
@@ -212,7 +212,7 @@ export const ConversationHistoryPage: React.FC = () => {
               disabled={loading || (data?.conversations || []).length === 0}
               sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
             >
-              Clear All History
+              Clear
             </Button>
             <Button
               variant="outlined"
@@ -228,7 +228,7 @@ export const ConversationHistoryPage: React.FC = () => {
                 '&:hover': { borderColor: '#94a3b8', backgroundColor: '#f1f5f9' },
               }}
             >
-              Refresh Data
+              Refresh
             </Button>
           </Stack>
         </Box>

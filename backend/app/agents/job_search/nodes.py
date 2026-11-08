@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import re
 import uuid
@@ -275,9 +276,12 @@ async def job_parser_agent_node(state: JobSearchGraphState) -> JobSearchGraphSta
     # Safely truncate text if excessively long for LLM parsing
     truncated_resume_text = raw_text[:12000]
 
+    current_date_str = datetime.now().strftime("%B %Y")
     user_prompt = (
+        f"Current Real-World Date: {current_date_str}\n\n"
         "Extract candidate profile information and skills for targeted job matching:\n\n"
-        f"--- RESUME START ---\n{truncated_resume_text}\n--- RESUME END ---"
+        f"--- RESUME START ---\n{truncated_resume_text}\n--- RESUME END ---\n\n"
+        f"Note: Calculate seniority and years of experience relative to {current_date_str}."
     )
 
     try:

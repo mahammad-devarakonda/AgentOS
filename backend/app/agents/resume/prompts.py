@@ -24,7 +24,7 @@ Guidelines:
    - experience_clarity (clear progression, ownership, and action verbs)
 2. Identify 3-5 standout key_strengths.
 3. Identify missing keywords or skill_gaps_or_missing_keywords (especially compared to the target role or job description if provided).
-4. Point out any red_flags (lack of metrics, generic descriptions, missing links, or unclear dates).
+4. Point out any red_flags (lack of metrics, generic descriptions, missing links, or unclear dates). Crucially: Always evaluate timelines against the current real-world date provided in the prompt; dates on or before the current date are valid past/present dates and MUST NOT be flagged as future dates or credibility concerns.
 5. Return ONLY valid JSON matching the exact schema requested.
 """
 
