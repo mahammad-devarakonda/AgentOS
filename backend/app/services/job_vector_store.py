@@ -29,6 +29,14 @@ resume_splitter = RecursiveCharacterTextSplitter(
     length_function=len,
 )
 
+# Specialized text splitter for job description requirements & responsibilities
+job_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=400,
+    chunk_overlap=50,
+    separators=["\n\n", "\n", ". ", " ", ""],
+    length_function=len,
+)
+
 
 class JobVectorStore:
     """Manages Qdrant vector indexing, dense semantic search, and RAG retrieval for jobs & resumes."""
@@ -59,13 +67,14 @@ class JobVectorStore:
 
     @staticmethod
     def _create_job_text_representation(job: JobPostingItem) -> str:
-        """Creates semantic text representation for high-fidelity embedding."""
+        """Creates semantic text representation for high-fidelity embedding, bounded within MiniLM limits."""
         skills_str = ", ".join(job.matched_skills + job.missing_skills)
+        desc_preview = job.description[:350] if job.description else ""
         return (
             f"Role: {job.title}. Company: {job.company}. Location: {job.location}. "
             f"Type: {job.type}. Compensation: {job.salary}. "
             f"Requirements & Skills: {skills_str}. "
-            f"Summary: {job.description}"
+            f"Summary: {desc_preview}"
         )
 
     def upsert_jobs(self, jobs: List[JobPostingItem]) -> int:

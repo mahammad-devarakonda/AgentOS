@@ -20,7 +20,7 @@ from app.schemas.job_search import (
 )
 from app.services.embedding_service import embedding_service
 from app.services.job_crawler import job_crawler
-from app.services.job_vector_store import job_vector_store
+from app.services.job_vector_store import job_splitter, job_vector_store
 from app.agents.job_search.state import JobSearchGraphState
 from app.agents.job_search.prompts import (
     ATS_MATCHER_SYSTEM_PROMPT,
@@ -549,11 +549,29 @@ async def ats_matcher_agent_node(state: JobSearchGraphState) -> JobSearchGraphSt
     for job in jobs:
         evidence_chunks = []
         try:
-            evidence_chunks = job_vector_store.retrieve_resume_evidence(
-                session_id=session_id,
-                job_requirement_query=f"{job.title}. {job.description}",
-                limit=3,
-            )
+            # Chunk the job description into discrete requirement chunks using job_splitter
+            jd_chunks = job_splitter.split_text(job.description) if job.description else []
+            queries = [job.title]
+            if jd_chunks:
+                queries.extend(jd_chunks[:3])
+            else:
+                queries.append(job.description[:300] if job.description else job.title)
+
+            all_hits = []
+            seen_snippets = set()
+            for q in queries:
+                hits = job_vector_store.retrieve_resume_evidence(
+                    session_id=session_id,
+                    job_requirement_query=q,
+                    limit=2,
+                )
+                for txt, sc in hits:
+                    clean = txt[:180].strip()
+                    if clean and clean not in seen_snippets:
+                        seen_snippets.add(clean)
+                        all_hits.append((txt, sc))
+
+            evidence_chunks = all_hits
         except Exception:
             evidence_chunks = []
 
@@ -575,7 +593,9 @@ async def ats_matcher_agent_node(state: JobSearchGraphState) -> JobSearchGraphSt
             }
         )
 
+    current_date_str = datetime.now().strftime("%B %Y")
     user_prompt = (
+        f"Current Real-World Date: {current_date_str}\n"
         f"Candidate Profile:\n{profile.model_dump_json(indent=2)}\n\n"
         f"Job Postings with Retrieved Resume Evidence:\n{json.dumps(job_evidence_blocks, indent=2)}\n\n"
         "Score each job from 65 to 98 based on technical overlap and the retrieved resume evidence, "
