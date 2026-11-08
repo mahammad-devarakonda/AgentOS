@@ -12,6 +12,7 @@ import {
   CheckCircleRounded as CheckIcon,
   TrendingUpRounded as TrendingIcon,
   OpenInNewRounded as ExternalLinkIcon,
+  AutoAwesomeRounded as LLMIcon,
 } from '@mui/icons-material';
 import type { ConversationAnalyticsItem } from '../../types/conversation';
 
@@ -53,10 +54,23 @@ export const JobSearchExecutionDetail: React.FC<JobSearchExecutionDetailProps> =
             </Typography>
           </Box>
 
-          <Chip
-            label={`${jobs.length} Vacancies Discovered`}
-            sx={{ bgcolor: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontWeight: 700, border: '1px solid rgba(16, 185, 129, 0.3)' }}
-          />
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <Chip
+              icon={<LLMIcon sx={{ fontSize: '11px !important', color: '#059669 !important' }} />}
+              label={`Generated via: ${meta.model || 'llama-3.3-70b-versatile'}`}
+              size="small"
+              sx={{
+                bgcolor: 'rgba(16, 185, 129, 0.08)',
+                color: '#059669',
+                fontWeight: 700,
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+              }}
+            />
+            <Chip
+              label={`${jobs.length} Vacancies Discovered`}
+              sx={{ bgcolor: 'rgba(16, 185, 129, 0.1)', color: '#059669', fontWeight: 700, border: '1px solid rgba(16, 185, 129, 0.3)' }}
+            />
+          </Stack>
         </Stack>
 
         {market.boolean_query && (

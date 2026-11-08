@@ -67,6 +67,11 @@ class JobService:
                 detail=f"Multi-agent job search failed: {str(exc)}",
             ) from exc
 
+        try:
+            selected_model = await GroqModelResolver.get_best_model()
+        except Exception:
+            selected_model = "llama-3.3-70b-versatile"
+
         response = JobSearchProcessResponse(
             filename=filename,
             target_role=target_role,
@@ -77,6 +82,7 @@ class JobService:
             ranking_summary=final_state["ranking_summary"],
             agent_trace=final_state.get("agent_trace", []),
             raw_text_preview=raw_text[:500] + ("..." if len(raw_text) > 500 else ""),
+            model=selected_model,
         )
 
         try:
@@ -86,6 +92,7 @@ class JobService:
                 preferred_location=preferred_location,
                 raw_text=raw_text,
                 result=response.model_dump(),
+                model=selected_model,
             )
         except Exception as log_err:
             print(f"[Warning] Failed to record job search history: {log_err}")
@@ -218,6 +225,7 @@ class JobService:
                 ranking_summary=accumulated_state["ranking_summary"],
                 agent_trace=accumulated_state.get("agent_trace", []),
                 raw_text_preview=raw_text[:500] + ("..." if len(raw_text) > 500 else ""),
+                model=selected_model,
             )
 
             try:
@@ -227,6 +235,7 @@ class JobService:
                     preferred_location=preferred_location,
                     raw_text=raw_text,
                     result=final_response.model_dump(),
+                    model=selected_model,
                 )
             except Exception as log_err:
                 print(f"[Warning] Failed to record job search history: {log_err}")
@@ -236,6 +245,7 @@ class JobService:
                     "type": "complete",
                     "status": "success",
                     "progress": 100,
+                    "model": selected_model,
                     "result": final_response.model_dump(),
                 }
             ) + "\n"

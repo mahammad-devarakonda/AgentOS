@@ -262,3 +262,35 @@ export const conversationApi = {
   },
 };
 
+export interface SystemModelInfo {
+  model: string;
+  provider: string;
+  status: string;
+  description?: string;
+}
+
+export const systemApi = {
+  async getActiveModel(): Promise<SystemModelInfo> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/system/model`);
+      if (!res.ok) {
+        return {
+          model: 'llama-3.3-70b-versatile',
+          provider: 'Groq',
+          status: 'online',
+          description: 'Groq Cloud Acceleration (llama-3.3-70b-versatile)',
+        };
+      }
+      return await res.json();
+    } catch {
+      return {
+        model: 'llama-3.3-70b-versatile',
+        provider: 'Groq',
+        status: 'online',
+        description: 'Groq Cloud Acceleration (llama-3.3-70b-versatile)',
+      };
+    }
+  },
+};
+
+

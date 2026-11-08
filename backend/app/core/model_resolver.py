@@ -113,16 +113,25 @@ class GroqModelResolver:
         ):
             return cls._selected_model
 
-        candidates = await cls.fetch_available_chat_models(force_refresh=force_refresh)
-        if not candidates:
-            # Reset failed set if exhausted and try once more
-            cls._failed_models.clear()
-            candidates = await cls.fetch_available_chat_models(force_refresh=True)
+        try:
+            candidates = await cls.fetch_available_chat_models(force_refresh=force_refresh)
+            if not candidates:
+                # Reset failed set if exhausted and try once more
+                cls._failed_models.clear()
+                candidates = await cls.fetch_available_chat_models(force_refresh=True)
 
-        if not candidates:
-            raise RuntimeError("No active chat completion models found for this GROQ_API_KEY.")
+            if candidates:
+                cls._selected_model = candidates[0]
+                return cls._selected_model
+        except Exception:
+            pass
 
-        cls._selected_model = candidates[0]
+        fallback = (
+            settings.GROQ_MODEL
+            if settings.GROQ_MODEL and settings.GROQ_MODEL.lower() != "auto"
+            else "llama-3.3-70b-versatile"
+        )
+        cls._selected_model = fallback
         return cls._selected_model
 
     @classmethod

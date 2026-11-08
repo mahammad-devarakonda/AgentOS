@@ -57,6 +57,11 @@ class ResumeService:
                 detail=f"Multi-agent resume processing failed: {str(exc)}",
             ) from exc
 
+        try:
+            selected_model = await GroqModelResolver.get_best_model()
+        except Exception:
+            selected_model = "llama-3.3-70b-versatile"
+
         response = ResumeProcessResponse(
             filename=filename,
             target_role=target_role,
@@ -66,6 +71,7 @@ class ResumeService:
             verification=final_state.get("verification"),
             agent_trace=final_state.get("agent_trace", []),
             raw_text_preview=raw_text[:500] + ("..." if len(raw_text) > 500 else ""),
+            model=selected_model,
         )
 
         try:
@@ -75,6 +81,7 @@ class ResumeService:
                 job_description=job_description,
                 raw_text=raw_text,
                 result=response.model_dump(),
+                model=selected_model,
             )
         except Exception as log_err:
             print(f"[Warning] Failed to record resume analysis history: {log_err}")
@@ -154,6 +161,7 @@ class ResumeService:
                                 "node_id": "extractor_agent",
                                 "status": "completed",
                                 "agent_label": latest_agent_label,
+                                "model": selected_model,
                                 "detail": latest_summary,
                                 "progress": 45,
                             }
@@ -163,6 +171,7 @@ class ResumeService:
                                 "type": "step_update",
                                 "node_id": "analyzer_agent",
                                 "status": "running",
+                                "model": selected_model,
                                 "detail": "Agent 2 is scoring ATS compatibility, quantified metrics, and role alignment...",
                                 "progress": 55,
                             }
@@ -175,6 +184,7 @@ class ResumeService:
                                 "node_id": "analyzer_agent",
                                 "status": "completed",
                                 "agent_label": latest_agent_label,
+                                "model": selected_model,
                                 "detail": latest_summary,
                                 "progress": 70,
                             }
@@ -184,6 +194,7 @@ class ResumeService:
                                 "type": "step_update",
                                 "node_id": "enhancer_agent",
                                 "status": "running",
+                                "model": selected_model,
                                 "detail": "Agent 3 is rewriting weak bullet points and crafting executive summary...",
                                 "progress": 78,
                             }
@@ -199,6 +210,7 @@ class ResumeService:
                                 "node_id": "enhancer_agent",
                                 "status": "completed",
                                 "agent_label": latest_agent_label,
+                                "model": selected_model,
                                 "detail": latest_summary,
                                 "progress": 85 if overall_score < 90 else 100,
                             }
@@ -210,6 +222,7 @@ class ResumeService:
                                     "type": "step_update",
                                     "node_id": "verifier_agent",
                                     "status": "running",
+                                    "model": selected_model,
                                     "detail": (
                                         f"Score is {overall_score}/100 (< 90 threshold) — Agent 4 (QA Verifier) "
                                         "is auditing all agent work and verifying 90+ score fixes..."
@@ -224,6 +237,7 @@ class ResumeService:
                                     "node_id": "verifier_agent",
                                     "status": "skipped",
                                     "agent_label": "Agent 4: QA Verifier (Skipped — Score >= 90)",
+                                    "model": selected_model,
                                     "detail": f"Overall score is {overall_score}/100 (>= 90). Secondary verification not required.",
                                     "progress": 100,
                                 }
@@ -236,6 +250,7 @@ class ResumeService:
                                 "node_id": "verifier_agent",
                                 "status": "completed",
                                 "agent_label": latest_agent_label,
+                                "model": selected_model,
                                 "detail": latest_summary,
                                 "progress": 100,
                             }
@@ -250,6 +265,7 @@ class ResumeService:
                 verification=accumulated_state.get("verification"),
                 agent_trace=accumulated_state.get("agent_trace", []),
                 raw_text_preview=raw_text[:500] + ("..." if len(raw_text) > 500 else ""),
+                model=selected_model,
             )
 
             try:
@@ -259,6 +275,7 @@ class ResumeService:
                     job_description=job_description,
                     raw_text=raw_text,
                     result=final_response.model_dump(),
+                    model=selected_model,
                 )
             except Exception as log_err:
                 print(f"[Warning] Failed to record resume analysis history: {log_err}")
@@ -267,6 +284,7 @@ class ResumeService:
                 {
                     "type": "complete",
                     "progress": 100,
+                    "model": selected_model,
                     "result": final_response.model_dump(),
                 }
             ) + "\n"

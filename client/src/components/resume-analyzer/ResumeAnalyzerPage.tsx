@@ -15,7 +15,7 @@ import { SuggestionsList } from './SuggestionsList';
 export const ResumeAnalyzerPage: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
-  const { result, loading, error, progress, pipelineSteps } = useSelector(
+  const { result, loading, error, progress, pipelineSteps, currentModel } = useSelector(
     (state: RootState) => state.resume
   );
 
@@ -97,6 +97,7 @@ export const ResumeAnalyzerPage: React.FC = () => {
                 steps={pipelineSteps}
                 progress={progress}
                 loading={loading}
+                model={currentModel || result?.model}
               />
 
               {result && (

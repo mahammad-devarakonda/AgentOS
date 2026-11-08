@@ -14,21 +14,52 @@ import {
   RadioButtonUnchecked as PendingIcon,
   RemoveCircleOutlined as SkippedIcon,
   ErrorOutlined as ErrorIcon,
+  AutoAwesomeRounded as LLMIcon,
 } from '@mui/icons-material';
 import type { LivePipelineStep } from '../../types/resume';
+import { systemApi } from '../../services/api';
 
 interface AgentProgressStepperProps {
   steps: LivePipelineStep[];
   progress: number;
   loading: boolean;
+  model?: string | null;
 }
 
 export const AgentProgressStepper: React.FC<AgentProgressStepperProps> = ({
   steps,
   progress,
   loading,
+  model,
 }) => {
+  const [systemModel, setSystemModel] = React.useState<string>('llama-3.3-70b-versatile');
+
+  React.useEffect(() => {
+    systemApi
+      .getActiveModel()
+      .then((res) => {
+        if (res?.model) setSystemModel(res.model);
+      })
+      .catch(() => {});
+  }, []);
+
   const activeStep = steps.find((s) => s.status === 'running');
+  const displayModel =
+    model ||
+    activeStep?.model ||
+    steps.find((s) => Boolean(s.model))?.model ||
+    systemModel ||
+    'llama-3.3-70b-versatile';
+
+  const isExecutingOrDone =
+    loading ||
+    progress > 0 ||
+    Boolean(model) ||
+    steps.some((s) => s.status === 'completed' || s.status === 'running');
+
+  const modelBadgeLabel = isExecutingOrDone
+    ? `Generated via: ${displayModel}`
+    : `LLM Engine: ${displayModel}`;
 
   return (
     <Card elevation={0}>
@@ -43,13 +74,28 @@ export const AgentProgressStepper: React.FC<AgentProgressStepperProps> = ({
           spacing={1}
         >
           <Box>
-            <Typography variant="h6">Live Multi-Agent Pipeline Status</Typography>
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 0.5 }}>
+              <Typography variant="h6">Live Multi-Agent Pipeline Status</Typography>
+              <Chip
+                icon={<LLMIcon sx={{ fontSize: '12px !important', color: '#4338ca !important' }} />}
+                label={modelBadgeLabel}
+                size="small"
+                sx={{
+                  bgcolor: 'rgba(99, 102, 241, 0.08)',
+                  color: '#4338ca',
+                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                  fontWeight: 700,
+                  fontSize: '0.72rem',
+                  height: 22,
+                }}
+              />
+            </Stack>
             <Typography variant="body2" color="text.secondary">
               {loading && activeStep
                 ? `Active Now: ${activeStep.title} — ${activeStep.detail}`
                 : progress === 100
-                ? 'All multi-agent stages finished'
-                : 'Click "Analyze Resume" to watch each agent execute in real time'}
+                  ? `All multi-agent stages finished • LLM: ${displayModel}`
+                  : `Click "Analyze Resume" to watch each agent execute in real time using ${displayModel}`}
             </Typography>
           </Box>
           <Chip
@@ -83,17 +129,17 @@ export const AgentProgressStepper: React.FC<AgentProgressStepperProps> = ({
                   borderColor: isRunning
                     ? 'primary.main'
                     : isCompleted
-                    ? '#bbf7d0'
-                    : isError
-                    ? 'error.light'
-                    : '#e2e8f0',
+                      ? '#bbf7d0'
+                      : isError
+                        ? 'error.light'
+                        : '#e2e8f0',
                   bgcolor: isRunning
                     ? '#eff6ff'
                     : isCompleted
-                    ? '#f0fdf4'
-                    : isError
-                    ? '#fef2f2'
-                    : '#f8fafc',
+                      ? '#f0fdf4'
+                      : isError
+                        ? '#fef2f2'
+                        : '#f8fafc',
                   transition: 'all 0.2s ease',
                 }}
               >
@@ -131,33 +177,52 @@ export const AgentProgressStepper: React.FC<AgentProgressStepperProps> = ({
                         {step.agentLabel || step.title}
                       </Typography>
 
-                      <Chip
-                        size="small"
-                        label={
-                          isRunning
-                            ? 'Working...'
-                            : isCompleted
-                            ? 'Verified & Done'
-                            : isSkipped
-                            ? 'Skipped (Score ≥ 90)'
-                            : isError
-                            ? 'Error'
-                            : 'Waiting'
-                        }
-                        color={
-                          isRunning
-                            ? 'primary'
-                            : isCompleted
-                            ? 'success'
-                            : isError
-                            ? 'error'
-                            : 'default'
-                        }
-                        variant={
-                          step.status === 'pending' || isSkipped ? 'outlined' : 'filled'
-                        }
-                        sx={{ height: 22, fontSize: '0.72rem' }}
-                      />
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                        {(step.model || displayModel) && !isSkipped && step.status !== 'pending' && (
+                          <Chip
+                            size="small"
+                            icon={<LLMIcon sx={{ fontSize: '11px !important', color: '#4338ca !important' }} />}
+                            label={step.model || displayModel}
+                            variant="outlined"
+                            sx={{
+                              height: 22,
+                              fontSize: '0.67rem',
+                              fontWeight: 600,
+                              borderColor: 'rgba(99, 102, 241, 0.25)',
+                              color: '#4338ca',
+                              bgcolor: 'rgba(99, 102, 241, 0.06)',
+                            }}
+                          />
+                        )}
+
+                        <Chip
+                          size="small"
+                          label={
+                            isRunning
+                              ? 'Working...'
+                              : isCompleted
+                                ? 'Verified & Done'
+                                : isSkipped
+                                  ? 'Skipped (Score ≥ 90)'
+                                  : isError
+                                    ? 'Error'
+                                    : 'Waiting'
+                          }
+                          color={
+                            isRunning
+                              ? 'primary'
+                              : isCompleted
+                                ? 'success'
+                                : isError
+                                  ? 'error'
+                                  : 'default'
+                          }
+                          variant={
+                            step.status === 'pending' || isSkipped ? 'outlined' : 'filled'
+                          }
+                          sx={{ height: 22, fontSize: '0.72rem' }}
+                        />
+                      </Stack>
                     </Stack>
 
                     <Typography

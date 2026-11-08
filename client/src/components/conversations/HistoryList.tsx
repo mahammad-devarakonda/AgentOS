@@ -16,6 +16,7 @@ import {
   AccessTimeRounded as TimeIcon,
   DeleteOutlineRounded as DeleteIcon,
   HistoryRounded as HistoryIcon,
+  AutoAwesomeRounded as LLMIcon,
 } from '@mui/icons-material';
 import type { ConversationAnalyticsItem } from '../../types/conversation';
 
@@ -232,23 +233,38 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                   {conv.title}
                 </Typography>
 
-                <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                   <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', color: '#94a3b8' }}>
                     <TimeIcon sx={{ fontSize: 13 }} />
                     <Typography variant="caption">{formatDate(conv.created_at)}</Typography>
                   </Stack>
-                  <Chip
-                    icon={<TokenIcon sx={{ fontSize: '11px !important' }} />}
-                    label={`${formatTokens(conv.token_usage?.total_tokens)} tokens`}
-                    size="small"
-                    sx={{
-                      height: 18,
-                      fontSize: '0.65rem',
-                      bgcolor: '#fef3c7',
-                      color: '#92400e',
-                      fontWeight: 700,
-                    }}
-                  />
+                  <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center' }}>
+                    <Chip
+                      icon={<LLMIcon sx={{ fontSize: '10px !important', color: '#4338ca !important' }} />}
+                      label={`LLM: ${meta.model || 'llama-3.3-70b-versatile'}`}
+                      size="small"
+                      sx={{
+                        height: 18,
+                        fontSize: '0.64rem',
+                        bgcolor: 'rgba(99, 102, 241, 0.08)',
+                        color: '#4338ca',
+                        fontWeight: 600,
+                        border: '1px solid rgba(99, 102, 241, 0.2)',
+                      }}
+                    />
+                    <Chip
+                      icon={<TokenIcon sx={{ fontSize: '11px !important' }} />}
+                      label={`${formatTokens(conv.token_usage?.total_tokens)} tokens`}
+                      size="small"
+                      sx={{
+                        height: 18,
+                        fontSize: '0.65rem',
+                        bgcolor: '#fef3c7',
+                        color: '#92400e',
+                        fontWeight: 700,
+                      }}
+                    />
+                  </Stack>
                 </Stack>
               </Box>
             );

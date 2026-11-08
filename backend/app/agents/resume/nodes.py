@@ -26,6 +26,10 @@ from app.agents.resume.prompts import (
 T = TypeVar("T", bound=BaseModel)
 
 
+# ==============================================================================
+# SECTION: SHARED UTILITIES & LLM INVOCATION HELPERS
+# ==============================================================================
+
 def _create_groq_llm(model_name: str, temperature: float = 0.1) -> ChatGroq:
     """Initializes ChatGroq for a specific model name backed by our shared HTTPX async client."""
     if not settings.GROQ_API_KEY or settings.GROQ_API_KEY == "your_groq_api_key_here":
@@ -118,16 +122,39 @@ def _extract_json_str(text: str) -> str:
     return cleaned
 
 
+# ==============================================================================
+# >>> START: AGENT 1 - PROFILE EXTRACTOR NODE (extractor_agent_node)
+# ==============================================================================
+# Role & Purpose:
+#   First agent in the pipeline. Responsible for reading raw, unformatted resume
+#   text and extracting it into a strictly structured `ExtractedResumeProfile`
+#   (contact details, skills categorization, work experience, education, projects).
+#
+# Inputs from State:
+#   - state["raw_text"]: The raw text parsed from uploaded PDF/DOCX or pasted text.
+#   - state["agent_trace"]: Historical execution log for UI stepper tracking.
+#
+# Outputs returned to State:
+#   - extracted_profile: ExtractedResumeProfile Pydantic object.
+#   - agent_trace: Updated trace list with Agent 1's execution status and summary.
+#
+# Next Pipeline Step:
+#   Passes state directly to AGENT 2 (analyzer_agent_node).
+# ==============================================================================
+
 async def extractor_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     """Node 1: Parses raw resume text into a structured ExtractedResumeProfile."""
+    # [Step 1: Retrieve input data from graph state]
     raw_text = state.get("raw_text", "")
     trace = list(state.get("agent_trace", []))
 
+    # [Step 2: Construct the extraction prompt with raw resume content]
     user_prompt = (
         "Extract the structured candidate profile from the following raw resume text:\n\n"
         f"--- RESUME TEXT START ---\n{raw_text}\n--- RESUME TEXT END ---"
     )
 
+    # [Step 3: Invoke Groq LLM with EXTRACTOR_SYSTEM_PROMPT and schema validation]
     profile, used_model = await _invoke_structured_agent(
         system_prompt=EXTRACTOR_SYSTEM_PROMPT,
         user_prompt=user_prompt,
@@ -135,6 +162,7 @@ async def extractor_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         temperature=0.0,
     )
 
+    # [Step 4: Record execution audit step for frontend UI display]
     total_skills = (
         len(profile.skills.technical_skills)
         + len(profile.skills.tools_and_frameworks)
@@ -152,14 +180,38 @@ async def extractor_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         )
     )
 
+    # [Step 5: Return updated state slice to LangGraph]
     return {
         "extracted_profile": profile,
         "agent_trace": trace,
     }
 
 
+# ==============================================================================
+# >>> START: AGENT 2 - ATS & QUALITY SCORER (analyzer_agent_node)
+# ==============================================================================
+# Role & Purpose:
+#   Second agent in the pipeline. Analyzes the candidate profile against ATS
+#   parsing standards, quantifiability / metrics impact, and alignment with
+#   the target role / job description. Computes section scores and overall score.
+#
+# Inputs from State:
+#   - state["extracted_profile"]: Output from Agent 1.
+#   - state["target_role"]: User's intended job role (e.g., "Senior Python Engineer").
+#   - state["job_description"]: Job description (if provided by user).
+#   - state["agent_trace"]: Historical execution steps.
+#
+# Outputs returned to State:
+#   - analysis: ResumeAnalysisEvaluation (overall_score, section_scores, gaps, feedback).
+#   - agent_trace: Updated trace with Agent 2's score summary.
+#
+# Next Pipeline Step:
+#   Passes state directly to AGENT 3 (enhancer_agent_node).
+# ==============================================================================
+
 async def analyzer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     """Node 2: Evaluates the extracted profile for ATS compatibility, impact, and JD alignment."""
+    # [Step 1: Retrieve inputs from state (profile from Agent 1 + role & JD)]
     profile = state["extracted_profile"]
     target_role = state.get("target_role") or "General Software / Technology Professional"
     job_description = (
@@ -168,6 +220,7 @@ async def analyzer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     )
     trace = list(state.get("agent_trace", []))
 
+    # [Step 2: Construct evaluation prompt combining profile and target role/JD]
     user_prompt = (
         f"Target Role: {target_role}\n"
         f"Job Description:\n{job_description}\n\n"
@@ -175,6 +228,7 @@ async def analyzer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         "Perform a comprehensive ATS, impact, and skill-gap analysis."
     )
 
+    # [Step 3: Invoke Groq LLM with ANALYZER_SYSTEM_PROMPT and schema validation]
     analysis, used_model = await _invoke_structured_agent(
         system_prompt=ANALYZER_SYSTEM_PROMPT,
         user_prompt=user_prompt,
@@ -182,6 +236,7 @@ async def analyzer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         temperature=0.1,
     )
 
+    # [Step 4: Record execution step with computed overall and section scores]
     trace.append(
         AgentExecutionStep(
             agent_name=f"Agent 2: ATS & Quality Scorer ({used_model})",
@@ -194,20 +249,48 @@ async def analyzer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         )
     )
 
+    # [Step 5: Return updated analysis to LangGraph state]
     return {
         "analysis": analysis,
         "agent_trace": trace,
     }
 
+# ==============================================================================
+# >>> START: AGENT 3 - RESUME COACH & ENHANCER (enhancer_agent_node)
+# ==============================================================================
+# Role & Purpose:
+#   Third agent in the pipeline. Generates tailored improvements:
+#   - Writes an upgraded executive summary aligned to the target role.
+#   - Rewrites weak bullet points using Google XYZ formula (Accomplished X by doing Y as measured by Z).
+#   - Provides prioritized, actionable recommendations.
+#
+# Inputs from State:
+#   - state["extracted_profile"]: Output from Agent 1.
+#   - state["analysis"]: Output from Agent 2 (score, critique, missing keywords).
+#   - state["target_role"]: User's intended job role.
+#   - state["job_description"]: Job description (if provided).
+#   - state["agent_trace"]: Historical execution steps.
+#
+# Outputs returned to State:
+#   - enhancements: ResumeEnhancementOutput (improved summary, bullet rewrites, recommendations).
+#   - agent_trace: Updated trace with enhancement metrics.
+#
+# Next Pipeline Step:
+#   Evaluated by conditional router `route_after_enhancer`:
+#   - If overall_score < 90  -> Routes to AGENT 4 (verifier_agent_node).
+#   - If overall_score >= 90 -> Pipeline completes (routes to END).
+# ==============================================================================
 
 async def enhancer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     """Node 3: Produces actionable bullet rewrites and an executive summary upgrade."""
+    # [Step 1: Retrieve inputs from Agent 1 (profile) and Agent 2 (analysis findings)]
     profile = state["extracted_profile"]
     analysis = state["analysis"]
     target_role = state.get("target_role") or "General Technology Role"
     job_description = state.get("job_description") or "Not specified"
     trace = list(state.get("agent_trace", []))
 
+    # [Step 2: Construct prompt with profile data and Agent 2's ATS findings]
     user_prompt = (
         f"Target Role: {target_role}\n"
         f"Job Description:\n{job_description}\n\n"
@@ -216,6 +299,7 @@ async def enhancer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         "Generate an improved executive summary, high-impact before/after bullet point rewrites, and prioritized recommendations."
     )
 
+    # [Step 3: Invoke Groq LLM with ENHANCER_SYSTEM_PROMPT and schema validation]
     enhancements, used_model = await _invoke_structured_agent(
         system_prompt=ENHANCER_SYSTEM_PROMPT,
         user_prompt=user_prompt,
@@ -223,6 +307,7 @@ async def enhancer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         temperature=0.2,
     )
 
+    # [Step 4: Record execution step detailing rewrites and recommendations generated]
     trace.append(
         AgentExecutionStep(
             agent_name=f"Agent 3: Resume Coach & Enhancer ({used_model})",
@@ -234,14 +319,43 @@ async def enhancer_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         )
     )
 
+    # [Step 5: Return enhancements to LangGraph state]
     return {
         "enhancements": enhancements,
         "agent_trace": trace,
     }
 
+# ==============================================================================
+# >>> START: AGENT 4 - QA VERIFIER & AUDITOR (verifier_agent_node) [CONDITIONAL]
+# ==============================================================================
+# Role & Purpose:
+#   Fourth agent in the pipeline. Runs CONDITIONALLY only when overall_score < 90.
+#   Acts as an independent quality assurance auditor:
+#   - Audits the outputs of Agents 1, 2, and 3 for factual consistency and accuracy.
+#   - Prevents AI hallucinations in bullet rewrites.
+#   - Produces critical fixes needed to boost the resume to a 90+ score.
+#   - Generates an upgraded summary and projects the final score boost.
+#
+# Inputs from State:
+#   - state["extracted_profile"]: Output from Agent 1.
+#   - state["analysis"]: Output from Agent 2.
+#   - state["enhancements"]: Output from Agent 3.
+#   - state["target_role"]: User's intended job role.
+#   - state["job_description"]: Job description (if provided).
+#   - state["agent_trace"]: Historical execution steps.
+#
+# Outputs returned to State:
+#   - verification: VerificationAuditOutput (audit notes, critical fixes, projected score).
+#   - enhancements: Updated with upgraded summary if provided by Verifier.
+#   - agent_trace: Updated trace with verification findings.
+#
+# Next Pipeline Step:
+#   Routes to END (Workflow completes).
+# ==============================================================================
 
 async def verifier_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     """Node 4 (Conditional): Audits and verifies all work when overall_score < 90."""
+    # [Step 1: Retrieve context and all prior outputs from Agents 1, 2, and 3]
     profile = state["extracted_profile"]
     analysis = state["analysis"]
     enhancements = state["enhancements"]
@@ -249,6 +363,7 @@ async def verifier_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     job_description = state.get("job_description") or "Not specified"
     trace = list(state.get("agent_trace", []))
 
+    # [Step 2: Construct verification prompt feeding all prior agent outputs]
     user_prompt = (
         f"Target Role: {target_role}\n"
         f"Job Description:\n{job_description}\n\n"
@@ -259,6 +374,7 @@ async def verifier_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         "and provide critical fixes and an upgraded summary to reach a 90+ score."
     )
 
+    # [Step 3: Invoke Groq LLM with VERIFIER_SYSTEM_PROMPT and schema validation]
     verification, used_model = await _invoke_structured_agent(
         system_prompt=VERIFIER_SYSTEM_PROMPT,
         user_prompt=user_prompt,
@@ -270,10 +386,11 @@ async def verifier_agent_node(state: ResumeGraphState) -> ResumeGraphState:
     if verification.verified_projected_score < 90:
         verification.verified_projected_score = max(92, analysis.overall_score + 15)
 
-    # Apply the verifier's upgraded summary to enhancements as well
+    # [Step 4: Propagate verifier's upgraded summary to enhancements for UI display]
     if verification.upgraded_summary:
         enhancements.improved_summary = verification.upgraded_summary
 
+    # [Step 5: Record execution audit step for QA verification]
     trace.append(
         AgentExecutionStep(
             agent_name=f"Agent 4: QA Verifier & Auditor ({used_model})",
@@ -286,9 +403,11 @@ async def verifier_agent_node(state: ResumeGraphState) -> ResumeGraphState:
         )
     )
 
+    # [Step 6: Return final verification results and updated state to LangGraph]
     return {
         "verification": verification,
         "enhancements": enhancements,
         "agent_trace": trace,
     }
+
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -42,7 +42,7 @@ import {
   FlashOn as BoltIcon,
 } from '@mui/icons-material';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { jobSearchApi } from '../../services/api';
+import { jobSearchApi, systemApi } from '../../services/api';
 import type { JobAgentStep, JobPostingItem, JobStreamStepEvent } from '../../types/jobSearch';
 
 const INITIAL_AGENT_STEPS: JobAgentStep[] = [
@@ -96,12 +96,19 @@ export const JobSearchPage: React.FC = () => {
 
   // Agent execution state
   const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [executionModel, setExecutionModel] = useState<string>('llama-3.3-70b-versatile');
   const [agentSteps, setAgentSteps] = useState<JobAgentStep[]>(INITIAL_AGENT_STEPS);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [searchCompleted, setSearchCompleted] = useState<boolean>(false);
   const [discoveredJobs, setDiscoveredJobs] = useState<JobPostingItem[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    systemApi.getActiveModel().then((res) => {
+      if (res?.model) setExecutionModel(res.model);
+    }).catch(() => { });
+  }, []);
 
   // Liked / Saved jobs state
   const [likedJobIds, setLikedJobIds] = useState<string[]>([]);
@@ -177,36 +184,6 @@ export const JobSearchPage: React.FC = () => {
     setErrorMessage(null);
   };
 
-  // Run fallback agent simulation if backend server is not reachable
-  const runLocalAgentSimulation = async () => {
-    const stepOrder = ['parser', 'market', 'discovery', 'matcher', 'ranking'];
-    for (let i = 0; i < stepOrder.length; i++) {
-      const currentId = stepOrder[i];
-      setActiveAgentId(currentId);
-      setProgressPercent(Math.round(((i + 0.5) / stepOrder.length) * 100));
-
-      setAgentSteps((prev) =>
-        prev.map((step) => {
-          if (step.id === currentId) return { ...step, status: 'running' };
-          if (stepOrder.indexOf(step.id) < i) return { ...step, status: 'completed' };
-          return { ...step, status: 'pending' };
-        })
-      );
-
-      await new Promise((resolve) => setTimeout(resolve, 1400));
-
-      setAgentSteps((prev) =>
-        prev.map((step) => (step.id === currentId ? { ...step, status: 'completed' } : step))
-      );
-      setProgressPercent(Math.round(((i + 1) / stepOrder.length) * 100));
-    }
-
-
-    setIsSearching(false);
-    setSearchCompleted(true);
-    setActiveAgentId(null);
-  };
-
   // Trigger Find Jobs multi-agent pipeline
   const handleFindJobs = async () => {
     if (!uploadedFile || isSearching) return;
@@ -230,30 +207,47 @@ export const JobSearchPage: React.FC = () => {
         targetRole,
         preferredLocation,
         (event: JobStreamStepEvent) => {
+          if (event.type === 'error') {
+            setErrorMessage(event.message || 'Job search validation failed.');
+            setIsSearching(false);
+            setActiveAgentId(null);
+            setAgentSteps((prev) =>
+              prev.map((s, idx) => (idx === 0 ? { ...s, status: 'pending', details: event.message } : s))
+            );
+            return;
+          }
+
           if (event.type === 'step_update') {
             if (event.progress !== undefined) {
               setProgressPercent(event.progress);
             }
+            if (event.model) {
+              setExecutionModel(event.model);
+            }
 
             if (event.agent_id) {
               setActiveAgentId(event.agent_id);
-              setAgentSteps((prev) =>
+              setAgentSteps((prev =>
                 prev.map((s) => {
                   if (s.id === event.agent_id) {
                     return {
                       ...s,
                       status: event.status === 'completed' ? 'completed' : 'running',
                       details: event.detail || s.description,
+                      model: event.model || executionModel,
                     };
                   }
                   return s;
                 })
-              );
+              ));
             }
           }
 
           if (event.type === 'complete' && event.result) {
             setDiscoveredJobs(event.result.discovered_jobs);
+            if (event.result.model || event.model) {
+              setExecutionModel(event.result.model || event.model || executionModel);
+            }
             setProgressPercent(100);
             setIsSearching(false);
             setSearchCompleted(true);
@@ -268,10 +262,14 @@ export const JobSearchPage: React.FC = () => {
         setSearchCompleted(true);
         setIsSearching(false);
       }
-    } catch {
-      // If backend API isn't running or encounters a transient network issue,
-      // seamlessly execute realistic agent progression so user gets full UI experience!
-      await runLocalAgentSimulation();
+    } catch (err: any) {
+      const errorText = err?.message || 'Failed to process document.';
+      setErrorMessage(errorText);
+      setIsSearching(false);
+      setActiveAgentId(null);
+      setAgentSteps((prev) =>
+        prev.map((s, idx) => (idx === 0 ? { ...s, status: 'pending', details: errorText } : s))
+      );
     }
   };
 
@@ -336,7 +334,7 @@ export const JobSearchPage: React.FC = () => {
         </Stack>
 
         {errorMessage && (
-          <Alert severity="warning" sx={{ mb: 3 }}>
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setErrorMessage(null)}>
             {errorMessage}
           </Alert>
         )}
@@ -629,15 +627,30 @@ export const JobSearchPage: React.FC = () => {
                 <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
                   <AgentIcon sx={{ color: 'primary.main' }} />
                   <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                      Multi-Agent Search Progress
-                    </Typography>
+                    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 0.5 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        Multi-Agent Search Progress
+                      </Typography>
+                      <Chip
+                        icon={<SparklesIcon sx={{ fontSize: '13px !important', color: '#1d4ed8 !important' }} />}
+                        label={`Generated via: ${executionModel}`}
+                        size="small"
+                        sx={{
+                          bgcolor: 'rgba(37, 99, 235, 0.08)',
+                          color: '#1d4ed8',
+                          border: '1px solid rgba(37, 99, 235, 0.25)',
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          height: 22,
+                        }}
+                      />
+                    </Stack>
                     <Typography variant="body2" color="text.secondary">
                       {isSearching && currentRunningAgent
                         ? `Running Agent: ${currentRunningAgent.name}`
                         : searchCompleted
-                          ? 'All 5 agents finished! Matching jobs discovered.'
-                          : 'Agent pipeline initialized'}
+                          ? `All 5 agents finished! Matching jobs discovered • LLM: ${executionModel}`
+                          : `Agent pipeline initialized with ${executionModel}`}
                     </Typography>
                   </Box>
                 </Stack>
@@ -681,7 +694,7 @@ export const JobSearchPage: React.FC = () => {
                   <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
                     <CircularProgress size={26} thickness={5} sx={{ color: '#2563eb' }} />
                     <Box sx={{ flexGrow: 1 }}>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                         <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#1e40af' }}>
                           CURRENTLY RUNNING: {currentRunningAgent.name}
                         </Typography>
@@ -689,6 +702,12 @@ export const JobSearchPage: React.FC = () => {
                           label={currentRunningAgent.role}
                           size="small"
                           sx={{ bgcolor: '#dbeafe', color: '#1e40af', fontWeight: 600, height: 20 }}
+                        />
+                        <Chip
+                          icon={<SparklesIcon sx={{ fontSize: '11px !important', color: '#1e40af !important' }} />}
+                          label={`LLM: ${executionModel}`}
+                          size="small"
+                          sx={{ bgcolor: '#bfdbfe', color: '#1e3a8a', fontWeight: 700, height: 20, fontSize: '0.67rem' }}
                         />
                       </Stack>
                       <Typography variant="body2" sx={{ color: '#1e3a8a', mt: 0.5 }}>
@@ -755,13 +774,31 @@ export const JobSearchPage: React.FC = () => {
                             >
                               {step.name}
                             </Typography>
-                            <Chip
-                              size="small"
-                              label={isRunning ? 'Running' : isCompleted ? 'Completed' : 'Waiting'}
-                              color={isRunning ? 'primary' : isCompleted ? 'success' : 'default'}
-                              variant={isRunning || isCompleted ? 'filled' : 'outlined'}
-                              sx={{ height: 20, fontSize: '0.7rem', fontWeight: 600, width: 'fit-content' }}
-                            />
+                            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                              {(isRunning || isCompleted) && (
+                                <Chip
+                                  size="small"
+                                  icon={<SparklesIcon sx={{ fontSize: '11px !important', color: '#1d4ed8 !important' }} />}
+                                  label={step.model || executionModel}
+                                  variant="outlined"
+                                  sx={{
+                                    height: 20,
+                                    fontSize: '0.67rem',
+                                    fontWeight: 600,
+                                    borderColor: 'rgba(37, 99, 235, 0.25)',
+                                    color: '#1d4ed8',
+                                    bgcolor: 'rgba(37, 99, 235, 0.05)',
+                                  }}
+                                />
+                              )}
+                              <Chip
+                                size="small"
+                                label={isRunning ? 'Running' : isCompleted ? 'Completed' : 'Waiting'}
+                                color={isRunning ? 'primary' : isCompleted ? 'success' : 'default'}
+                                variant={isRunning || isCompleted ? 'filled' : 'outlined'}
+                                sx={{ height: 20, fontSize: '0.7rem', fontWeight: 600, width: 'fit-content' }}
+                              />
+                            </Stack>
                           </Stack>
                           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                             {step.details || step.description}
@@ -995,9 +1032,17 @@ export const JobSearchPage: React.FC = () => {
                               mb: job.application_tip ? 1.5 : 0,
                             }}
                           >
-                            <Typography variant="caption" sx={{ fontWeight: 700, color: '#1e40af', display: 'block' }}>
-                              Agent Evaluation Summary
-                            </Typography>
+                            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5, flexWrap: 'wrap' }}>
+                              <Typography variant="caption" sx={{ fontWeight: 700, color: '#1e40af' }}>
+                                Agent Evaluation Summary
+                              </Typography>
+                              <Chip
+                                icon={<SparklesIcon sx={{ fontSize: '10px !important', color: '#1e40af !important' }} />}
+                                label={`LLM: ${executionModel}`}
+                                size="small"
+                                sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#dbeafe', color: '#1e40af', fontWeight: 600 }}
+                              />
+                            </Stack>
                             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
                               {job.agent_summary}
                             </Typography>

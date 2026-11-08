@@ -110,3 +110,4 @@ class ResumeProcessResponse(BaseModel):
     verification: Optional[VerificationAuditOutput] = None
     agent_trace: List[AgentExecutionStep] = Field(default_factory=list)
     raw_text_preview: str = Field(default="", description="First 500 characters of parsed text")
+    model: Optional[str] = Field(default="llama-3.3-70b-versatile", description="LLM used for generation")

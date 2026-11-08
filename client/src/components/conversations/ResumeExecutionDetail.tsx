@@ -73,6 +73,18 @@ export const ResumeExecutionDetail: React.FC<ResumeExecutionDetailProps> = ({ co
               <Typography variant="h6" sx={{ fontWeight: 800, color: '#0f172a' }}>
                 {extracted.full_name || extracted.name || 'Candidate Profile'}
               </Typography>
+              <Chip
+                icon={<SparklesIcon sx={{ fontSize: '12px !important', color: '#4338ca !important' }} />}
+                label={`Generated via: ${meta.model || 'llama-3.3-70b-versatile'}`}
+                size="small"
+                sx={{
+                  bgcolor: 'rgba(99, 102, 241, 0.08)',
+                  color: '#4338ca',
+                  fontWeight: 700,
+                  fontSize: '0.7rem',
+                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                }}
+              />
               {meta.target_role && (
                 <Chip
                   label={`Target: ${meta.target_role}`}

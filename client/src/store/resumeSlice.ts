@@ -50,6 +50,7 @@ interface ResumeState {
   loading: boolean;
   error: string | null;
   progress: number;
+  currentModel: string | null;
   pipelineSteps: LivePipelineStep[];
 }
 
@@ -58,6 +59,7 @@ const initialState: ResumeState = {
   loading: false,
   error: null,
   progress: 0,
+  currentModel: null,
   pipelineSteps: createInitialPipelineSteps(),
 };
 
@@ -117,6 +119,7 @@ const resumeSlice = createSlice({
       state.result = null;
       state.error = null;
       state.progress = 0;
+      state.currentModel = null;
       state.pipelineSteps = createInitialPipelineSteps();
     },
     updatePipelineProgress(state, action: PayloadAction<StreamStepEvent>) {
@@ -124,12 +127,16 @@ const resumeSlice = createSlice({
       if (typeof event.progress === 'number') {
         state.progress = event.progress;
       }
+      if (event.model) {
+        state.currentModel = event.model;
+      }
       if (event.type === 'step_update' && event.node_id) {
         const target = state.pipelineSteps.find((s) => s.nodeId === event.node_id);
         if (target) {
           if (event.status) target.status = event.status;
           if (event.detail) target.detail = event.detail;
           if (event.agent_label) target.agentLabel = event.agent_label;
+          if (event.model) target.model = event.model;
         }
       }
     },
@@ -161,6 +168,9 @@ const resumeSlice = createSlice({
         state.loading = false;
         state.progress = 100;
         state.result = action.payload;
+        if (action.payload.model) {
+          state.currentModel = action.payload.model;
+        }
       })
       .addCase(analyzeResumeFile.rejected, (state, action) => {
         failPipeline(state, action.payload);
@@ -170,6 +180,9 @@ const resumeSlice = createSlice({
         state.loading = false;
         state.progress = 100;
         state.result = action.payload;
+        if (action.payload.model) {
+          state.currentModel = action.payload.model;
+        }
       })
       .addCase(analyzeResumeText.rejected, (state, action) => {
         failPipeline(state, action.payload);

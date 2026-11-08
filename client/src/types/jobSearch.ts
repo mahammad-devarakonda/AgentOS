@@ -57,6 +57,7 @@ export interface JobSearchProcessResponse {
   ranking_summary: OpportunityRankingSummary;
   agent_trace: AgentExecutionStep[];
   raw_text_preview?: string;
+  model?: string;
 }
 
 export interface JobStreamStepEvent {
@@ -79,5 +80,6 @@ export interface JobAgentStep {
   description: string;
   status: 'pending' | 'running' | 'completed';
   details?: string;
+  model?: string;
 }
 

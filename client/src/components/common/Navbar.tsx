@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -21,9 +21,10 @@ import {
   DashboardRounded as DashboardIcon,
   HistoryRounded as HistoryIcon,
   Menu as MenuIcon,
-  Circle as CircleIcon,
+  AutoAwesomeRounded as LLMIcon,
 } from '@mui/icons-material';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { systemApi, type SystemModelInfo } from '../../services/api';
 
 export const Navbar: React.FC = () => {
   const theme = useTheme();
@@ -31,6 +32,13 @@ export const Navbar: React.FC = () => {
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileAnchor, setMobileAnchor] = React.useState<null | HTMLElement>(null);
+  const [modelInfo, setModelInfo] = React.useState<SystemModelInfo | null>(null);
+
+  useEffect(() => {
+    systemApi.getActiveModel().then((data) => {
+      setModelInfo(data);
+    });
+  }, []);
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: <DashboardIcon fontSize="small" /> },
@@ -146,18 +154,20 @@ export const Navbar: React.FC = () => {
 
           {/* Right Status Indicator & Actions */}
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+            {/* Active LLM Indicator */}
             <Chip
-              icon={<CircleIcon sx={{ fontSize: '10px !important', color: '#10b981 !important' }} />}
-              label="Engine Online"
+              icon={<LLMIcon sx={{ fontSize: '13px !important', color: '#2563eb !important' }} />}
+              label={`LLM: ${modelInfo?.model || 'llama-3.3-70b-versatile'}`}
               size="small"
               variant="outlined"
               sx={{
-                borderColor: '#10b981',
-                color: '#065f46',
-                bgcolor: 'rgba(16, 185, 129, 0.08)',
-                fontWeight: 600,
-                fontSize: '0.72rem',
+                borderColor: 'rgba(37, 99, 235, 0.3)',
+                color: '#1d4ed8',
+                bgcolor: 'rgba(37, 99, 235, 0.08)',
+                fontWeight: 700,
+                fontSize: '0.60rem',
                 display: { xs: 'none', sm: 'inline-flex' },
+                boxShadow: '0 1px 2px rgba(37, 99, 235, 0.05)',
               }}
             />
 

@@ -567,6 +567,7 @@ class ConversationService:
         job_description: Optional[str],
         raw_text: str,
         result: Dict[str, Any],
+        model: Optional[str] = None,
     ) -> str:
         """
         Persists a completed Resume Analyzer execution into the history store.
@@ -581,6 +582,7 @@ class ConversationService:
         enhancements = result.get("enhancements") or {}
         verification = result.get("verification")
         agent_trace = result.get("agent_trace") or []
+        active_model = model or result.get("model") or "llama-3.3-70b-versatile"
 
         candidate_name = extracted.get("full_name") or extracted.get("name") or "Candidate"
         role_label = target_role or extracted.get("current_title") or "Professional Profile"
@@ -600,6 +602,7 @@ class ConversationService:
 
         metadata = {
             "type": "resume_analyzer",
+            "model": active_model,
             "filename": filename,
             "target_role": target_role,
             "job_description": job_description,
@@ -636,7 +639,7 @@ class ConversationService:
                         "user",
                         "User",
                         f"Submitted resume '{filename}' ({len(raw_text):,} characters) for target role: '{role_label}'.",
-                        json.dumps({"filename": filename, "target_role": target_role}),
+                        json.dumps({"filename": filename, "target_role": target_role, "model": active_model}),
                         now,
                     ),
                 )
@@ -655,7 +658,7 @@ class ConversationService:
                         "agent",
                         "Agent 1: Profile Extractor",
                         f"Extracted candidate profile: '{candidate_name}'. Identified {len(skills_list)} categorized skills and {len(exp_list)} work history records.",
-                        json.dumps({"candidate_name": candidate_name, "skills_count": len(skills_list)}),
+                        json.dumps({"candidate_name": candidate_name, "skills_count": len(skills_list), "model": active_model}),
                         now,
                     ),
                 )
@@ -673,7 +676,7 @@ class ConversationService:
                         "agent",
                         "Agent 2: ATS & Quality Scorer",
                         f"Calculated ATS Readiness Score: {overall_score}/100. Discovered {len(analysis.get('strengths', []))} key strengths and {len(analysis.get('weaknesses', []))} areas for improvement.",
-                        json.dumps({"overall_score": overall_score}),
+                        json.dumps({"overall_score": overall_score, "model": active_model}),
                         now,
                     ),
                 )
@@ -691,7 +694,7 @@ class ConversationService:
                         "agent",
                         "Agent 3: Resume Coach & Enhancer",
                         f"Formulated executive summary and generated {len(rewrites)} before/after bullet rewrites with quantified impact.",
-                        json.dumps({"rewrites_count": len(rewrites)}),
+                        json.dumps({"rewrites_count": len(rewrites), "model": active_model}),
                         now,
                     ),
                 )
@@ -699,6 +702,8 @@ class ConversationService:
                 # 5. Verifier Agent step log (if ran)
                 if verification:
                     v_score = verification.get("verified_score", overall_score)
+                    v_meta = dict(verification)
+                    v_meta["model"] = active_model
                     conn.execute(
                         """
                         INSERT INTO messages (id, conversation_id, role, sender_name, content, metadata, created_at)
@@ -710,7 +715,7 @@ class ConversationService:
                             "agent",
                             "Agent 4: QA Verifier Auditor",
                             f"Audited initial score ({overall_score}/100 < 90). Verified fixes resulting in adjusted quality score: {v_score}/100.",
-                            json.dumps(verification),
+                            json.dumps(v_meta),
                             now,
                         ),
                     )
@@ -726,6 +731,7 @@ class ConversationService:
         preferred_location: Optional[str],
         raw_text: str,
         result: Dict[str, Any],
+        model: Optional[str] = None,
     ) -> str:
         """
         Persists a completed Job Search execution into the history store.
@@ -740,6 +746,7 @@ class ConversationService:
         jobs = result.get("discovered_jobs") or []
         ranking = result.get("ranking_summary") or {}
         agent_trace = result.get("agent_trace") or []
+        active_model = model or result.get("model") or "llama-3.3-70b-versatile"
 
         cand_name = cand.get("name") or "Candidate"
         role_label = target_role or cand.get("current_title") or "Opportunity Search"
@@ -762,6 +769,7 @@ class ConversationService:
 
         metadata = {
             "type": "job_search",
+            "model": active_model,
             "filename": filename,
             "target_role": target_role,
             "preferred_location": preferred_location,
@@ -799,7 +807,7 @@ class ConversationService:
                         "user",
                         "User",
                         f"Initiated multi-agent job search for '{role_label}' in '{loc_label}' using '{filename}'.",
-                        json.dumps({"target_role": target_role, "location": preferred_location}),
+                        json.dumps({"target_role": target_role, "location": preferred_location, "model": active_model}),
                         now,
                     ),
                 )
@@ -817,7 +825,7 @@ class ConversationService:
                         "agent",
                         "Agent 2: Market Query Synthesizer",
                         f"Synthesized high-precision boolean search query: '{bool_query}'.",
-                        json.dumps({"query": bool_query}),
+                        json.dumps({"query": bool_query, "model": active_model}),
                         now,
                     ),
                 )
@@ -834,7 +842,7 @@ class ConversationService:
                         "agent",
                         "Agent 3 & 4: Discovery & ATS Matcher",
                         f"Scanned developer boards and matched {len(jobs)} live vacancies. Top ATS compatibility score: {top_match}%.",
-                        json.dumps({"jobs_count": len(jobs), "top_match": top_match}),
+                        json.dumps({"jobs_count": len(jobs), "top_match": top_match, "model": active_model}),
                         now,
                     ),
                 )
@@ -852,7 +860,7 @@ class ConversationService:
                         "agent",
                         "Agent 5: Opportunity Ranking Agent",
                         f"Synthesized strategic pitch guidance and personalized application angles. Top recommendation: {rec[:120]}...",
-                        json.dumps({"recommendation": rec}),
+                        json.dumps({"recommendation": rec, "model": active_model}),
                         now,
                     ),
                 )

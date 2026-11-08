@@ -100,6 +100,7 @@ export interface ResumeProcessResponse {
   verification?: VerificationAuditOutput | null;
   agent_trace: AgentExecutionStep[];
   raw_text_preview: string;
+  model?: string;
 }
 
 export type AgentNodeId =
@@ -118,6 +119,7 @@ export interface LivePipelineStep {
   agentLabel?: string;
   status: StepStatus;
   detail: string;
+  model?: string;
 }
 
 export interface StreamStepEvent {
