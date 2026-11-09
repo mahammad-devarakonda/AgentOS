@@ -183,6 +183,17 @@ class JobVectorStore:
         if not raw_chunks:
             return 0
 
+        # --- Print chunking output for inspection & debugging ---
+        print("\n" + "=" * 60)
+        print(f"[CHUNKING OUTPUT] Session ID: {session_id}")
+        print(f"Total Resume Length: {len(raw_text)} chars")
+        print(f"Total Chunks Generated: {len(raw_chunks)}")
+        print("-" * 60)
+        for idx, chunk in enumerate(raw_chunks, 1):
+            print(f"--- Chunk #{idx} ({len(chunk)} chars) ---")
+            print(chunk)
+        print("=" * 60 + "\n")
+
         embeddings = embedding_service.embed_documents_sync(raw_chunks)
         points = []
         for idx, (chunk_text, emb) in enumerate(zip(raw_chunks, embeddings)):

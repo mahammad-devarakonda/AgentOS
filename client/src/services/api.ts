@@ -275,19 +275,19 @@ export const systemApi = {
       const res = await fetch(`${API_BASE_URL}/system/model`);
       if (!res.ok) {
         return {
-          model: 'llama-3.3-70b-versatile',
-          provider: 'Groq',
+          model: '',
+          provider: '',
           status: 'online',
-          description: 'Groq Cloud Acceleration (llama-3.3-70b-versatile)',
+          description: '',
         };
       }
       return await res.json();
     } catch {
       return {
-        model: 'llama-3.3-70b-versatile',
-        provider: 'Groq',
+        model: '',
+        provider: '',
         status: 'online',
-        description: 'Groq Cloud Acceleration (llama-3.3-70b-versatile)',
+        description: '',
       };
     }
   },

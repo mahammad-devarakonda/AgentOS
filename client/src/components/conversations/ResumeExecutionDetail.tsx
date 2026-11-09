@@ -75,7 +75,7 @@ export const ResumeExecutionDetail: React.FC<ResumeExecutionDetailProps> = ({ co
               </Typography>
               <Chip
                 icon={<SparklesIcon sx={{ fontSize: '12px !important', color: '#4338ca !important' }} />}
-                label={`Generated via: ${meta.model || 'llama-3.3-70b-versatile'}`}
+                label={`Generated via: ${meta.model}`}
                 size="small"
                 sx={{
                   bgcolor: 'rgba(99, 102, 241, 0.08)',

@@ -57,7 +57,7 @@ export const JobSearchExecutionDetail: React.FC<JobSearchExecutionDetailProps> =
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
             <Chip
               icon={<LLMIcon sx={{ fontSize: '11px !important', color: '#059669 !important' }} />}
-              label={`Generated via: ${meta.model || 'llama-3.3-70b-versatile'}`}
+              label={`Generated via: ${meta.model}`}
               size="small"
               sx={{
                 bgcolor: 'rgba(16, 185, 129, 0.08)',

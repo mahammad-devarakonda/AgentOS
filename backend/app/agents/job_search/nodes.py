@@ -10,6 +10,12 @@ from langchain_groq import ChatGroq
 from app.core.config import settings
 from app.core.http_client import http_client_manager
 from app.core.model_resolver import GroqModelResolver
+from app.schemas.guardrails import (
+    DocumentGuardrailError,
+    DocumentType,
+    DocumentValidationError,
+    ResumeClassificationResult,
+)
 from app.schemas.resume import AgentExecutionStep
 from app.schemas.job_search import (
     JobMatchEvaluationList,
@@ -22,6 +28,13 @@ from app.services.embedding_service import embedding_service
 from app.services.job_crawler import job_crawler
 from app.services.job_vector_store import job_splitter, job_vector_store
 from app.agents.job_search.state import JobSearchGraphState
+from app.agents.job_search.guardrails import (
+    RESUME_SECTION_KEYWORDS,
+    _validate_resume_document,
+    classify_resume_document,
+    extract_text_from_bytes,
+    validate_file_bytes,
+)
 from app.agents.job_search.prompts import (
     ATS_MATCHER_SYSTEM_PROMPT,
     JOB_DISCOVERY_SYSTEM_PROMPT,
@@ -119,26 +132,8 @@ async def _invoke_structured_job_agent(
 
 
 # ---------------------------------------------------------
-# Resume Validation & Heuristic Profiling Guardrails
+# Document Guardrails & Routing Nodes
 # ---------------------------------------------------------
-RESUME_SECTION_KEYWORDS = [
-    "experience",
-    "work history",
-    "employment",
-    "education",
-    "skills",
-    "projects",
-    "summary",
-    "professional summary",
-    "profile",
-    "certifications",
-    "qualifications",
-    "technologies",
-    "curriculum vitae",
-    "resume",
-    "work experience",
-]
-
 COMMON_TECH_SKILLS = [
     "Python", "JavaScript", "TypeScript", "Java", "C++", "C#", "Go", "Rust", "Ruby", "PHP", "Swift", "Kotlin", "SQL",
     "React", "Angular", "Vue", "Next.js", "Node.js", "Express", "FastAPI", "Django", "Flask", "Spring",
@@ -149,36 +144,228 @@ COMMON_TECH_SKILLS = [
 ]
 
 
-def _validate_resume_document(raw_text: str, filename: str) -> None:
-    """Pre-flight guardrail: Validates that uploaded text is a genuine resume/CV rather than a story, novel, or random document."""
-    lower_text = raw_text.lower()
+async def file_validation_node(state: JobSearchGraphState) -> JobSearchGraphState:
+    """Guardrail Node 1: Validates file format, magic signature, and binary integrity."""
+    filename = state.get("filename", "uploaded_resume")
+    file_bytes = state.get("file_bytes")
+    raw_text = state.get("raw_text")
+    content_type = state.get("content_type")
+    trace = list(state.get("agent_trace", []))
 
-    # 1. Section matches
-    matched_sections = [
-        k for k in RESUME_SECTION_KEYWORDS
-        if re.search(r"\b" + re.escape(k) + r"\b", lower_text)
-    ]
+    # Binary file uploaded (PDF / DOCX)
+    if file_bytes is not None:
+        try:
+            val_res = validate_file_bytes(
+                file_bytes=file_bytes,
+                filename=filename,
+                content_type=content_type,
+            )
+            trace.append(
+                AgentExecutionStep(
+                    agent_name="Guardrail: File Validation",
+                    status="completed",
+                    summary=f"Validated {val_res.file_format} binary format & signature for '{filename}' ({val_res.file_size_bytes:,} bytes).",
+                )
+            )
+            return {
+                "validation_status": "file_valid",
+                "agent_trace": trace,
+            }
+        except DocumentGuardrailError as err:
+            trace.append(
+                AgentExecutionStep(
+                    agent_name="Guardrail: File Validation",
+                    status="failed",
+                    summary=str(err),
+                )
+            )
+            return {
+                "error": str(err),
+                "validation_status": "file_invalid",
+                "agent_trace": trace,
+            }
 
-    # 2. Narrative/fiction markers
-    fiction_indicators = ["chapter ", "prologue", "epilogue", "novel", "once upon a time"]
-    has_fiction_markers = any(f in lower_text[:3000] for f in fiction_indicators)
+    # Text input submitted directly
+    if raw_text is not None:
+        if len(raw_text.strip()) == 0:
+            err_msg = f"Document content for '{filename}' is empty."
+            trace.append(
+                AgentExecutionStep(
+                    agent_name="Guardrail: File Validation",
+                    status="failed",
+                    summary=err_msg,
+                )
+            )
+            return {
+                "error": err_msg,
+                "validation_status": "text_empty",
+                "agent_trace": trace,
+            }
+        trace.append(
+            AgentExecutionStep(
+                agent_name="Guardrail: File Validation",
+                status="completed",
+                summary=f"Validated raw text document for '{filename}' ({len(raw_text):,} characters).",
+            )
+        )
+        return {
+            "validation_status": "text_valid",
+            "agent_trace": trace,
+        }
 
-    # 3. Contact & Date indicators
-    has_email = bool(re.search(r"[\w\.-]+@[\w\.-]+\.\w+", raw_text))
-    has_date_ranges = bool(
-        re.search(r"\b(20\d\d|19\d\d)\s*[-–—to]+\s*(20\d\d|present|current)\b", lower_text)
+    err_msg = "No document file bytes or text provided for analysis."
+    return {"error": err_msg, "validation_status": "missing_input", "agent_trace": trace}
+
+
+async def document_extraction_node(state: JobSearchGraphState) -> JobSearchGraphState:
+    """Guardrail Node 2: Extracts readable text using PyMuPDF (PDF) or python-docx (DOCX)."""
+    if state.get("error"):
+        return state
+
+    filename = state.get("filename", "uploaded_resume")
+    file_bytes = state.get("file_bytes")
+    raw_text = state.get("raw_text")
+    trace = list(state.get("agent_trace", []))
+
+    if file_bytes is not None:
+        try:
+            extracted_text = extract_text_from_bytes(file_bytes=file_bytes, filename=filename)
+            trace.append(
+                AgentExecutionStep(
+                    agent_name="Guardrail: Text Extraction",
+                    status="completed",
+                    summary=f"Extracted {len(extracted_text):,} characters from '{filename}' via PyMuPDF/python-docx.",
+                )
+            )
+            return {
+                "raw_text": extracted_text,
+                "agent_trace": trace,
+            }
+        except DocumentGuardrailError as err:
+            trace.append(
+                AgentExecutionStep(
+                    agent_name="Guardrail: Text Extraction",
+                    status="failed",
+                    summary=str(err),
+                )
+            )
+            return {
+                "error": str(err),
+                "agent_trace": trace,
+            }
+
+    if raw_text is not None:
+        if len(raw_text.strip()) < settings.MIN_RESUME_TEXT_CHARS:
+            err_msg = (
+                f"Document text in '{filename}' is too short ({len(raw_text.strip())} chars). "
+                f"A complete resume with at least {settings.MIN_RESUME_TEXT_CHARS} characters is required."
+            )
+            trace.append(
+                AgentExecutionStep(
+                    agent_name="Guardrail: Text Extraction",
+                    status="failed",
+                    summary=err_msg,
+                )
+            )
+            return {
+                "error": err_msg,
+                "agent_trace": trace,
+            }
+        return {"raw_text": raw_text, "agent_trace": trace}
+
+    return {"error": "No text extracted from document.", "agent_trace": trace}
+
+
+async def resume_classification_node(state: JobSearchGraphState) -> JobSearchGraphState:
+    """Guardrail Node 3: Classifies document authenticity using deterministic & LLM classifier."""
+    if state.get("error"):
+        return state
+
+    raw_text = state.get("raw_text", "")
+    filename = state.get("filename", "uploaded_resume")
+    trace = list(state.get("agent_trace", []))
+
+    try:
+        classification = await classify_resume_document(raw_text=raw_text, filename=filename)
+    except Exception as exc:
+        classification = ResumeClassificationResult(
+            document_type=DocumentType.UNCERTAIN,
+            confidence=0.5,
+            reason=f"Classification error: {str(exc)}",
+            detected_sections=[],
+        )
+
+    is_valid = (
+        classification.document_type == DocumentType.RESUME
+        and classification.confidence >= settings.RESUME_CONFIDENCE_THRESHOLD
     )
 
-    is_valid = len(matched_sections) >= 2 or (len(matched_sections) >= 1 and (has_email or has_date_ranges))
-    if has_fiction_markers and len(matched_sections) < 3:
-        is_valid = False
-
     if not is_valid:
-        raise ValueError(
-            f"The uploaded document '{filename}' does not appear to be a professional resume or CV. "
-            f"No work history, education, or professional skill sections were detected. "
-            f"Please upload a valid resume."
+        rejection_reason = (
+            f"Document rejected: {classification.reason} "
+            f"(Type: {classification.document_type.value}, Confidence: {classification.confidence:.2f}, "
+            f"Threshold: {settings.RESUME_CONFIDENCE_THRESHOLD})."
         )
+        trace.append(
+            AgentExecutionStep(
+                agent_name="Guardrail: Resume Classification",
+                status="failed",
+                summary=rejection_reason,
+            )
+        )
+        return {
+            "classification": classification,
+            "error": rejection_reason,
+            "agent_trace": trace,
+        }
+
+    trace.append(
+        AgentExecutionStep(
+            agent_name="Guardrail: Resume Classification",
+            status="completed",
+            summary=(
+                f"Verified genuine candidate resume (Confidence: {classification.confidence:.2f}). "
+                f"Detected sections: {', '.join(classification.detected_sections) if classification.detected_sections else 'Standard'}. "
+                f"{classification.reason}"
+            ),
+        )
+    )
+    return {
+        "classification": classification,
+        "agent_trace": trace,
+    }
+
+
+def reject_document_node(state: JobSearchGraphState) -> JobSearchGraphState:
+    """Terminal guardrail node when document validation or classification fails."""
+    error_msg = state.get("error") or "Uploaded document rejected: not a valid resume."
+    raise DocumentValidationError(error_msg)
+
+
+def route_after_file_validation(state: JobSearchGraphState) -> str:
+    if state.get("error"):
+        return "reject_document"
+    return "document_extraction"
+
+
+def route_after_document_extraction(state: JobSearchGraphState) -> str:
+    if state.get("error"):
+        return "reject_document"
+    return "resume_classification"
+
+
+def route_after_classification(state: JobSearchGraphState) -> str:
+    if state.get("error"):
+        return "reject_document"
+    classification = state.get("classification")
+    if not classification:
+        return "reject_document"
+    if (
+        classification.document_type == DocumentType.RESUME
+        and classification.confidence >= settings.RESUME_CONFIDENCE_THRESHOLD
+    ):
+        return "job_parser_agent"
+    return "reject_document"
 
 
 def _extract_profile_heuristically(
@@ -214,8 +401,8 @@ def _extract_profile_heuristically(
         if re.match(r"^[A-Za-z\s\.\-']{3,40}$", first_line):
             candidate_name = first_line
 
-    # Experience heuristic
-    years = 2.0
+    # Experience heuristic: default to 0.0 when no evidence exists (never assume 2 years!)
+    years = 0.0
     exp_matches = re.findall(
         r"(\d+(?:\.\d+)?)\+?\s*(?:years?|yrs?)(?:\s+of)?\s+experience", lower_text
     )
@@ -223,7 +410,25 @@ def _extract_profile_heuristically(
         try:
             years = float(exp_matches[0])
         except Exception:
-            years = 3.0
+            years = 0.0
+    else:
+        # Check timeline date ranges (e.g., 2019 - 2023 or 2021 - Present)
+        date_pairs = re.findall(
+            r"\b(20\d\d|19\d\d)\s*[-–—to]+\s*(20\d\d|present|current)\b", lower_text
+        )
+        if date_pairs:
+            current_year = datetime.now().year
+            total_span = 0.0
+            for start_str, end_str in date_pairs:
+                try:
+                    s_yr = int(start_str)
+                    e_yr = current_year if end_str in ("present", "current") else int(end_str)
+                    if 0 <= (e_yr - s_yr) <= 40:
+                        total_span = max(total_span, float(e_yr - s_yr))
+                except Exception:
+                    pass
+            if total_span > 0:
+                years = total_span
 
     # Role detection from text
     detected = target_role
@@ -239,7 +444,7 @@ def _extract_profile_heuristically(
         else:
             detected = "Software Engineer"
 
-    seniority = "Senior" if years >= 5 else ("Mid" if years >= 2 else "Junior")
+    seniority = "Senior" if years >= 5 else ("Mid" if years >= 2 else ("Junior" if years > 0 else "Entry-level"))
 
     return ParsedCandidateProfile(
         full_name=candidate_name,
@@ -261,9 +466,6 @@ async def job_parser_agent_node(state: JobSearchGraphState) -> JobSearchGraphSta
     filename = state.get("filename", "uploaded_resume")
     trace = list(state.get("agent_trace", []))
     session_id = state.get("session_id") or str(uuid.uuid4())[:12]
-
-    # Pre-flight guardrail: Validate document is actually a resume
-    _validate_resume_document(raw_text=raw_text, filename=filename)
 
     # Step 1: Index raw resume chunks into Qdrant Vector Store
     chunk_count = 0

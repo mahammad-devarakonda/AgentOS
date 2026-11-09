@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: Optional[str] = None
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
 
+    # Document Guardrails & Validation Configurations
+    RESUME_CONFIDENCE_THRESHOLD: float = 0.85
+    MAX_RESUME_FILE_SIZE_MB: int = 10
+    MIN_RESUME_TEXT_CHARS: int = 100
+
 
     model_config = SettingsConfigDict(
         env_file=".env",

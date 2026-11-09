@@ -39,7 +39,7 @@ async def job_search_health():
 
 @router.post("/search", response_model=JobSearchProcessResponse, tags=["Job Search Multi-Agent"])
 async def search_jobs_with_resume_file(
-    file: UploadFile = File(..., description="Resume file in PDF, DOCX, or TXT format"),
+    file: UploadFile = File(..., description="Resume file in PDF or DOCX format"),
     target_role: Optional[str] = Form(default=None, description="Optional target title or role"),
     preferred_location: Optional[str] = Form(default=None, description="Optional preferred location or remote"),
 ) -> JobSearchProcessResponse:
@@ -66,16 +66,17 @@ async def search_jobs_with_resume_text(
 
 @router.post("/search-stream", tags=["Job Search Multi-Agent (Live Stream)"])
 async def search_jobs_file_stream(
-    file: UploadFile = File(..., description="Resume file in PDF, DOCX, or TXT format"),
+    file: UploadFile = File(..., description="Resume file in PDF or DOCX format"),
     target_role: Optional[str] = Form(default=None, description="Optional target title or role"),
     preferred_location: Optional[str] = Form(default=None, description="Optional preferred location or remote"),
 ):
     """Streams real-time step-by-step progress as each job search agent executes."""
-    raw_text = await extract_text_from_upload(file)
+    content_bytes = await file.read()
     return StreamingResponse(
         job_service.stream_job_search(
-            raw_text=raw_text,
+            file_bytes=content_bytes,
             filename=file.filename or "uploaded_resume",
+            content_type=file.content_type,
             target_role=target_role,
             preferred_location=preferred_location,
         ),

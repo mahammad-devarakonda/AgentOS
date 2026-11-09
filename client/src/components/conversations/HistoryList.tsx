@@ -241,7 +241,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                   <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center' }}>
                     <Chip
                       icon={<LLMIcon sx={{ fontSize: '10px !important', color: '#4338ca !important' }} />}
-                      label={`LLM: ${meta.model || 'llama-3.3-70b-versatile'}`}
+                      label={`LLM: ${meta.model}`}
                       size="small"
                       sx={{
                         height: 18,

@@ -17,7 +17,7 @@ interface AuditTraceViewProps {
 export const AuditTraceView: React.FC<AuditTraceViewProps> = ({ conversation }) => {
   const messages = conversation.messages || [];
   const agentTrace = conversation.metadata?.agent_trace || [];
-  const conversationModel = conversation.metadata?.model || 'llama-3.3-70b-versatile';
+  const conversationModel = conversation.metadata?.model;
 
   const formatDate = (isoString: string) => {
     try {

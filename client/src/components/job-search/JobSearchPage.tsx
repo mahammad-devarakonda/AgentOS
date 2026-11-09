@@ -96,7 +96,7 @@ export const JobSearchPage: React.FC = () => {
 
   // Agent execution state
   const [isSearching, setIsSearching] = useState<boolean>(false);
-  const [executionModel, setExecutionModel] = useState<string>('llama-3.3-70b-versatile');
+  const [executionModel, setExecutionModel] = useState<string>('');
   const [agentSteps, setAgentSteps] = useState<JobAgentStep[]>(INITIAL_AGENT_STEPS);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [progressPercent, setProgressPercent] = useState<number>(0);

@@ -157,7 +157,7 @@ export const Navbar: React.FC = () => {
             {/* Active LLM Indicator */}
             <Chip
               icon={<LLMIcon sx={{ fontSize: '13px !important', color: '#2563eb !important' }} />}
-              label={`LLM: ${modelInfo?.model || 'llama-3.3-70b-versatile'}`}
+              label={`LLM: ${modelInfo?.model}`}
               size="small"
               variant="outlined"
               sx={{

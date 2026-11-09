@@ -32,7 +32,7 @@ export const AgentProgressStepper: React.FC<AgentProgressStepperProps> = ({
   loading,
   model,
 }) => {
-  const [systemModel, setSystemModel] = React.useState<string>('llama-3.3-70b-versatile');
+  const [systemModel, setSystemModel] = React.useState<string>('');
 
   React.useEffect(() => {
     systemApi
@@ -40,7 +40,7 @@ export const AgentProgressStepper: React.FC<AgentProgressStepperProps> = ({
       .then((res) => {
         if (res?.model) setSystemModel(res.model);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const activeStep = steps.find((s) => s.status === 'running');
@@ -48,8 +48,7 @@ export const AgentProgressStepper: React.FC<AgentProgressStepperProps> = ({
     model ||
     activeStep?.model ||
     steps.find((s) => Boolean(s.model))?.model ||
-    systemModel ||
-    'llama-3.3-70b-versatile';
+    systemModel;
 
   const isExecutingOrDone =
     loading ||
